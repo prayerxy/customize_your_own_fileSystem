@@ -11,7 +11,7 @@
 #include <linux/netlink.h>
 #include <errno.h>
 
-#include "../include/XCraft.h"
+#include "XCraft.h"
 
 
 

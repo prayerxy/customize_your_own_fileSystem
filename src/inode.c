@@ -3,8 +3,8 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include "../include/bitmap.h"
-#include "../include/XCraft.h"
+#include "bitmap.h"
+#include "XCraft.h"
 #include 
 // additional
 // 由ino获取指定的inode
