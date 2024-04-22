@@ -7,19 +7,31 @@
 #include "../include/XCraft.h"
 #include 
 // additional
+<<<<<<< HEAD
 // ç”±inoèŽ·å–æŒ‡å®šçš„inode
+=======
+// ÓÉino»ñÈ¡¶ÔÓ¦µÄinode
+>>>>>>> d4cc19427a6d0e53fd85b16221ad3f38cb5d3f89
 struct inode *XCraft_iget(struct super_block *sb, unsigned long ino);
 
 // qstr = &dentry->d_name
 struct inode *XCraft_new_inode(handle_t *handle, struct inode * dir,
 			     const struct qstr *qstr, int mode);
 
+<<<<<<< HEAD
 // hash treeæ·»åŠ ç›®å½•é¡¹
+=======
+// hash treeÌí¼ÓÄ¿Â¼Ïî
+>>>>>>> d4cc19427a6d0e53fd85b16221ad3f38cb5d3f89
 static int XCraft_dx_add_entry(handle_t *handle, const struct qstr *qstr,
 			     struct inode *dir, struct inode *inode);
 
 
+<<<<<<< HEAD
 // ï¿½ï¿½dentry->d_parentï¿½ï¿½È¡ï¿½ï¿½Ä¿Â¼inodeï¿½ï¿½È»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ´´ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿Â¼ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½
+=======
+// ÓÉdentry->d_parent»ñÈ¡µ½Ä¿Â¼inode£¬È»ºóÔÚËüµÄÏÂÃæ´´½¨ÎÄ¼þÌí¼ÓÄ¿Â¼ÏîÊ±µ÷ÓÃ
+>>>>>>> d4cc19427a6d0e53fd85b16221ad3f38cb5d3f89
 static int XCraft_add_entry(handle_t *handle, struct dentry *dentry,
 			  struct inode *inode);
 

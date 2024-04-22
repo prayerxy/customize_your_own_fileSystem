@@ -13,7 +13,10 @@
 
 #include "../include/XCraft.h"
 
+<<<<<<< HEAD
 
 
 
 
+=======
+>>>>>>> d4cc19427a6d0e53fd85b16221ad3f38cb5d3f89
