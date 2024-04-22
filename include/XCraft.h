@@ -79,6 +79,14 @@ struct dx_root{
    struct dx_entry entries[0]; /* entries 一个块后面全部是dx_entry */
 };
 
+struct XCraft_hash{
+
+};
+
+struct XCraft_frame{
+
+};
+
 #ifdef __KERNEL__
 struct XCraft_inode_info{
     //ino 逻辑Inode号接在inode->i_no中
