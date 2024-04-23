@@ -1,3 +1,5 @@
+#define pr_diary(xcraft) KBUILD_MODNAME ": " xcraft
+
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>

@@ -1,12 +1,17 @@
-// htree Ref:https://blogs.oracle.com/linux/post/understanding-ext4-disk-layout-part-2
+﻿// htree Ref:https://blogs.oracle.com/linux/post/understanding-ext4-disk-layout-part-2
 // block group + dir hash
 #ifndef XCRAFT_H
 #define XCRAFT_H
 #include <linux/types.h>
+#include <linux/version.h>
 #define XCRAFT_MAGIC 0x58435241 /* "XCRA" */
 #define XCRAFT_BLOCK_SIZE (1 << 12) /* 4 KiB */
 #define XCRAFT_N_BLOCK 15   //12个直接索引块 2个1级间接索引块 1个2级间接索引块
 #define XCRAFT_NAME_LEN 255
+
+// 版本号判断 inode_operations因版本号而变化
+#define XCraft_iop_version_judge() LINUX_VERSION_CODE > KERNEL_VERSION(5,11,22)
+#define XCraft_aop_version_judge() LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
 typedef unsigned int xcraft_group_t 
 struct XCraft_inode{
     __le16 i_mode; /* file mode */

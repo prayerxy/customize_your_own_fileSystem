@@ -5,6 +5,7 @@
 #include <linux/buffer_head.h>
 
 #include "XCraft.h"
+#include "bitmap.h"
 // hash value to caculate and hash tree to build
 
 int XCraft_dirhash(const char *name, int len, struct XCraft_hash *hinfo);
