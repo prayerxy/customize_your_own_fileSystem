@@ -13,6 +13,7 @@
 struct inode *XCraft_iget(struct super_block *sb, unsigned long ino);
 
 // qstr = &dentry->d_name
+//注意inode_init_owner的版本号的变化
 struct inode *XCraft_new_inode(handle_t *handle, struct inode * dir,
 			     const struct qstr *qstr, int mode);
 
