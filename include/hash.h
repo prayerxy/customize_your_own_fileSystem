@@ -3,12 +3,12 @@
 #include <linux/ext3_fs.h>
 #include <linux/cryptohash.h>
 #include <linux/buffer_head.h>
-
+#include <linux/dcache.h>	/* For d_splice_alias */
 #include "XCraft.h"
 #include "bitmap.h"
 // hash value to caculate and hash tree to build
 
-int XCraft_dirhash(const char *name, int len, struct XCraft_hash *hinfo);
+int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo);
 
 
 // hash tree to build
