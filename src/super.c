@@ -217,12 +217,14 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     }
     sb_info->s_blocks_per_group = le32_to_cpu(disk_sb->s_blocks_per_group);
     sb_info->s_inodes_per_group = le32_to_cpu(disk_sb->s_inodes_per_group);
-    // sb_info->s_gdb_count = le32_to_cpu(disk_sb->s_gdb_count);
+    sb_info->s_gdb_count = le32_to_cpu(disk_sb->s_gdb_count);
     sb_info->s_desc_per_block = XCRAFT_GROUP_DESCS_PER_BLOCK;
     sb_info->s_groups_count = le32_to_cpu(disk_sb->s_groups_count);
     sb_info->s_sbh = bh;
     sb_info->s_super = disk_sb;
     sb->s_fs_info = sb_info;
+    sb_info->s_last_group_inodes = le32_to_cpu(disk_sb->s_inodes_count)-sb_info->s_inodes_per_group*(sb_info->s_groups_count-1);
+    sb_info->s_last_group_blocks = le32_to_cpu(disk_sb->s_last_group_blocks);
     // sb_info->s_group_desc = NULL;
 
     // get s_gdb_count and s_group_desc

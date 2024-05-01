@@ -80,7 +80,7 @@ struct XCraft_inode{
 #define XCRAFT_inodes_str_blocks_PER (XCRAFT_INODES_PER_GROUP)/XCRAFT_INODES_PER_BLOCK
 
 //注意这里一定是整除 因为在write_super加上Mod
-#define XCRAFT_inodes_str_blocks_last(sb) ((sb)->s_inodes_count - ((sb)->s_groups_count - 1) * (sb)->s_inodes_per_group) / XCRAFT_INODES_PER_BLOCK
+#define XCRAFT_inodes_str_blocks_last(sb) (le32_to_cpu((sb)->s_inodes_count) - (le32_to_cpu((sb)->s_groups_count) - 1) * le32_to_cpu((sb)->s_inodes_per_group)) / XCRAFT_INODES_PER_BLOCK
 struct XCraft_superblock{
     __le32 s_inodes_count; /* number of inodes */
     __le32 s_blocks_count; /* number of blocks */
@@ -159,6 +159,8 @@ struct XCraft_inode_info{
 struct XCraft_superblock_info{
     unsigned long s_blocks_per_group; /* number of blocks per group */
     unsigned long s_inodes_per_group; /* number of inodes per group */
+    unsigned long s_last_group_inodes;//最后一个组的inode数
+    unsigned long s_last_group_blocks;//最后一个组的块数
     unsigned long s_gdb_count; /* number of group descriptor blocks */
     unsigned long s_desc_per_block; /* number of group descriptors per block */
     xcraft_group_t s_groups_count; /* number of groups */
