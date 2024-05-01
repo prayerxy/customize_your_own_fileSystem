@@ -35,7 +35,7 @@ static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	struct XCraft_super_block_info *sb_info = XCRAFT_SB(sb);
 	struct XCraft_superblock *disk_sb = sb_info->s_super;
 	struct buffer_head *bh = NULL;
-
+	//算法有问题，待改 todo
 	uint32_t block_group = ino / (sb_info->s_inodes_per_group);
 	uint32_t inode_index_in_group = ino % (sb_info->s_inodes_per_group);
 
