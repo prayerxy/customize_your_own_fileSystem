@@ -5,7 +5,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include "XCraft.h"
+#include "../include/XCraft.h"
 
 //ls
 static int XCraft_readdir(struct file *file, struct dir_context *ctx);

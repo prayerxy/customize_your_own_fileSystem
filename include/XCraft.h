@@ -1,4 +1,5 @@
 ﻿// htree Ref:https://blogs.oracle.com/linux/post/understanding-ext4-disk-layout-part-2
+//  Ref：https://github.com/sysprog21/simplefs/tree/master
 // block group + dir hash
 #ifndef XCRAFT_H
 #define XCRAFT_H
@@ -8,11 +9,30 @@
 #define XCRAFT_BLOCK_SIZE (1 << 12) /* 4 KiB */
 #define XCRAFT_N_BLOCK 15   //12个直接索引块 2个1级间接索引块 1个2级间接索引块
 #define XCRAFT_NAME_LEN 255
-
+#define XCRAFT_INODE_RATIO 16384
+#define XCRAFT_DESC_LIMIT_blo 2
 // 版本号判断 inode_operations因版本号而变化
 #define XCraft_iop_version_judge() LINUX_VERSION_CODE > KERNEL_VERSION(5,11,22)
 #define XCraft_aop_version_judge() LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
-typedef unsigned int xcraft_group_t 
+
+/* todo
+XCraft partition layout
+ * +---------------+
+ * |  superblock   |  1 block
+ * +---------------+
+ * |  descriptor   |  sb->nr_group_descs blocks
+ * +---------------+
+ * | ifree bitmap  |  sb->nr_ifree_blocks blocks
+ * +---------------+
+ * | bfree bitmap  |  sb->nr_bfree_blocks blocks
+ * +---------------+
+ * |    data       |
+ * |      blocks   |  rest of the blocks
+ * +---------------+
+ */
+
+
+typedef unsigned int xcraft_group_t; 
 struct XCraft_inode{
     __le16 i_mode; /* file mode */
     __le16 i_uid; /* owner UID */

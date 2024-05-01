@@ -6,7 +6,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/statfs.h>
-#include "XCraft.h"
+#include "../include/XCraft.h"
 
 // slab cache for XCraft_inode_info
 static struct kmem_cache *XCraft_inode_cache;

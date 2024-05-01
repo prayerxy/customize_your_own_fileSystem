@@ -1,4 +1,4 @@
-#include "hash.h"
+#include "../include/hash.h"
 
 // hash value to caculate 
 // name:文件名 len:文件名长度  hinfo:hash值

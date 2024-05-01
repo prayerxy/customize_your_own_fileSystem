@@ -5,9 +5,9 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include "bitmap.h"
-#include "XCraft.h"
-#include "hash.h"
+#include "../include/bitmap.h"
+#include "../include/XCraft.h"
+#include "../include/hash.h"
 // additional
 // 由ino获取指定的inode
 struct inode *XCraft_iget(struct super_block *sb, unsigned long ino);

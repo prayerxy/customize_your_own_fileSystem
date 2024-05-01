@@ -6,8 +6,8 @@
 #include <linux/module.h>
 #include <linux/mpage.h>
 
-#include "bitmap.h"
-#include "XCraft.h"
+#include "../include/bitmap.h"
+#include "../includeXCraft.h"
 
 static int XCraft_file_get_block(struct inode *inode,
                                    sector_t iblock,

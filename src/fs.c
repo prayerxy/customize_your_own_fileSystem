@@ -5,7 +5,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/types.h>
-#include "XCraft.h"
+#include "../include/XCraft.h"
 
 // mount
 static struct dentry *XCraft_mount(struct file_system_type *fs_type,

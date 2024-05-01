@@ -4,6 +4,8 @@
         "version.h": "c",
         "kernel.h": "c",
         "bitmap.h": "c",
-        "xcraft.h": "c"
+        "xcraft.h": "c",
+        "types.h": "c",
+        "hash.h": "c"
     }
 }
