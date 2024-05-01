@@ -6,6 +6,14 @@
         "bitmap.h": "c",
         "xcraft.h": "c",
         "types.h": "c",
-        "hash.h": "c"
+        "hash.h": "c",
+        "atomic": "c",
+        "*.tcc": "c",
+        "chrono": "c",
+        "cstdint": "c",
+        "random": "c",
+        "stdint.h": "c",
+        "little_endian.h": "c",
+        "endian.h": "c"
     }
 }

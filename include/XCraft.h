@@ -5,15 +5,26 @@
 #define XCRAFT_H
 #include <linux/types.h>
 #include <linux/version.h>
+#include <stdint.h>
 #define XCRAFT_MAGIC 0x58435241 /* "XCRA" */
 #define XCRAFT_BLOCK_SIZE (1 << 12) /* 4 KiB */
-#define XCRAFT_N_BLOCK 15   //12个直接索引块 2个1级间接索引块 1个2级间接索引块
+#define XCRAFT_N_BLOCK 15   //2个直接索引块 2个1级间接索引块 1个2级间接索引块
 #define XCRAFT_NAME_LEN 255
-#define XCRAFT_INODE_RATIO 16384
+#define XCRAFT_INODE_RATIO 4
 #define XCRAFT_DESC_LIMIT_blo 2
+#define XCRAFT_BLOCKS_PER_GROUP 32768
 // 版本号判断 inode_operations因版本号而变化
-#define XCraft_iop_version_judge() LINUX_VERSION_CODE > KERNEL_VERSION(5,11,22)
-#define XCraft_aop_version_judge() LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
+#define USER_NS_REQUIRED() LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+#define MNT_IDMAP_REQUIRED() LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+
+// desc flags
+#define XCraft_BG_INODE_UNINIT	0x0001 /* Inode table/bitmap not in use */
+#define XCraft_BG_BLOCK_UNINIT	0x0002 /* Block bitmap not in use */
+#define Xcraft_BG_INODE_ZEROED	0x0004 /* On-disk itable initialized to zero */
+
+// inode flags
+#define XCraft_INODE_HASH_TREE 0x0001
+#define XCraft_INODE_HASH_TREE_IS(flag) flag & XCraft_INODE_HASH_TREE
 
 /* todo
 XCraft partition layout
@@ -31,7 +42,13 @@ XCraft partition layout
  * +---------------+
  */
 
-
+static inline uint32_t ceil_div(uint32_t a, uint32_t b){
+    uint32_t c = a / b;
+    if(a % b){
+        c++;
+    }
+    return c;
+}
 typedef unsigned int xcraft_group_t; 
 struct XCraft_inode{
     __le16 i_mode; /* file mode */
@@ -43,7 +60,7 @@ struct XCraft_inode{
     __le32 i_dtime; /* deletion time */
     __le16 i_gid; /* owner GID */
     __le16 i_links_count; /* hard links count */
-    __le32 i_blocks_lo; /* number of blocks */
+    __le32 i_blocks_lo; /* number of blocks 如果是目录inode 哈希树块数量；如果是文件inode 文件占的块大小*/
     __le32 i_flags; /* file flags B+树等 */
     __le32 i_block[XCRAFT_N_BLOCK]; /* pointers to blocks */
     char i_data[32]; /* store symlink content */
@@ -52,6 +69,16 @@ struct XCraft_inode{
 #define XCRAFT_INODE_SIZE sizeof(struct XCraft_inode)
 #define XCRAFT_INODES_PER_BLOCK (XCRAFT_BLOCK_SIZE / XCRAFT_INODE_SIZE)
 
+#define XCRAFT_INODES_PER_GROUP 8192
+
+ /*
+    最后一个块组的inode_store不一定是XCRAFT_inodes_str_blocks_PER，
+    而是(s_inodes_count-(s_groups_count-1)*s_inodes_per_group)/XCRAFT_INODES_PER_BLOCK
+*/
+#define XCRAFT_inodes_str_blocks_PER (XCRAFT_INODES_PER_GROUP)/XCRAFT_INODES_PER_BLOCK
+
+//注意这里一定是整除 因为在write_super加上Mod
+#define XCRAFT_inodes_str_blocks_last(sb) ((sb)->s_inodes_count - ((sb)->s_groups_count - 1) * (sb)->s_inodes_per_group) / XCRAFT_INODES_PER_BLOCK
 struct XCraft_superblock{
     __le32 s_inodes_count; /* number of inodes */
     __le32 s_blocks_count; /* number of blocks */
@@ -59,6 +86,8 @@ struct XCraft_superblock{
     __le32 s_free_inodes_count; /* number of free inodes */
     __le32 s_blocks_per_group; /* number of blocks per group */
     __le32 s_inodes_per_group; /* number of inodes per group */
+    __le32 s_groups_count; /* number of groups */
+    __le32 s_last_group_blocks;//最后一个组的块数
     __le16 s_magic; /* magic number */
     __le16 s_inode_size; /* inode size */
 };
@@ -75,6 +104,9 @@ struct XCraft_group_desc{
 #define XCRAFT_GROUP_DESC_SIZE sizeof(struct XCraft_group_desc)
 #define XCRAFT_GROUP_DESCS_PER_BLOCK (XCRAFT_BLOCK_SIZE / XCRAFT_GROUP_DESC_SIZE)
 
+
+//最开始建树的时候，10个以上分类成哈希树
+#define XCRAFT_dentry_LIMIT 10
 struct XCraft_dir_entry{
      //对于 u8 类型的数据，字节序转换是不必要的。
     //其他数据要转换 le16_to_cpu
