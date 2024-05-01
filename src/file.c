@@ -56,14 +56,13 @@ static ssize_t XCraft_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 int XCraft_sync_file(struct file *file, loff_t start, loff_t end, int datasync);
 
 // address_space_operations
-static const struct address_space_operations ext4_aops = {
+static const struct address_space_operations XCraft_aops = {
 #if XCraft_aop_version_judge()
     .readahead = XCraft_readahead,
 #else
     .readpage = XCraft_readpage,
 #endif
 	.readpage		= XCraft_readpage,
-	.readahead		= XCraft_readahead,
 	.writepage		= XCraft_writepage,
 	.write_begin		= XCraft_write_begin,
 	.write_end		= XCraft_write_end,

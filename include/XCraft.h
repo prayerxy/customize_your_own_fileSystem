@@ -1,10 +1,12 @@
 ﻿// htree Ref:https://blogs.oracle.com/linux/post/understanding-ext4-disk-layout-part-2
 //  Ref：https://github.com/sysprog21/simplefs/tree/master
+//  Ref：https://github.com/sysprog21/simplefs/tree/master
 // block group + dir hash
 #ifndef XCRAFT_H
 #define XCRAFT_H
 #include <linux/types.h>
 #include <linux/version.h>
+#include <stdint.h>
 #include <stdint.h>
 #define XCRAFT_MAGIC 0x58435241 /* "XCRA" */
 #define XCRAFT_BLOCK_SIZE (1 << 12) /* 4 KiB */
