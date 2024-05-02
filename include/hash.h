@@ -19,4 +19,4 @@ static int XCraft_make_hash_tree(handle_t *handle, const struct qstr *qstr,
 // do_split
 static struct XCraft_dir_entry *do_split(handle_t *handle, struct inode *dir,
 			struct buffer_head **bh,struct XCraft_frame *frame,
-			struct XCraft_hash *hinfo);
+			struct XCraft_hash_info *hinfo);

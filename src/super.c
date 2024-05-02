@@ -58,9 +58,9 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     struct buffer_head *bh;
     uint32_t ino = inode->i_ino;
     // block_group num
-    uint32_t inode_group = inode_get_block_group(sb, ino);
+    uint32_t inode_group = inode_get_block_group(sb_info, ino);
     // get ino in group
-    uint32_t inode_shift_in_group = inode_get_block_group_shift(sb, ino);
+    uint32_t inode_shift_in_group = inode_get_block_group_shift(sb_info, ino);
     
 
     // caculate ino is beyond
@@ -259,9 +259,27 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
         ret = -ENOMEM;
         goto out_free_group_desc;
     }
+    sb_info->s_ibmap_info = kzalloc(sizeof(struct XCraft_ibmap_info *) * sb_info->s_groups_count, GFP_KERNEL);
+    sb_info->s_ibmap_info[0]=kzalloc(sizeof(struct XCraft_ibmap_info),GFP_KERNEL);
+    sb_info->s_ibmap_info[0]->ifree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE,GFP_KERNEL);
+
+
+    uint32_t bfree_blo;
+    if(sb->xcraft_sb.s_groups_count==1){
+        bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32toh(sb->xcraft_sb.s_last_group_blocks));
+    }
+    else bfree_blo=1;
+  
+    sb_info->s_ibmap_info[0]->bfree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE*bfree_blo,GFP_KERNEL);
+
+    if(!sb_info->s_ibmap_info[0]->ifree_bitmap||!sb_info->s_ibmap_info[0]->bfree_bitmap){
+        ret = -ENOMEM;
+        goto out_free_group_desc;
+    }
     for(int i=0;i<XCRAFT_DESC_LIMIT_blo;i++){
         bh1 = sb_bread(sb, i+1);
         group_desc[i] = bh1;
+        
         
         if(!bh1){
             ret = -EIO;

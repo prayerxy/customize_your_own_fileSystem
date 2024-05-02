@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-// additional
-// 获取块组描述符
-//
+//  additional
+//  获取块组描述符
+//	
 static struct XCraft_group_desc *XCraft_get_group_desc(struct XCraft_super_block_info *sb_info, uint32_t block_group)
 {
 	struct buffer_head **s_group_desc = sb_info->s_group_desc;
@@ -32,8 +32,8 @@ static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	struct XCraft_superblock *disk_sb = sb_info->s_super;
 	struct buffer_head *bh = NULL;
 
-	uint32_t block_group = inode_get_block_group(sb, ino);
-	uint32_t inode_index_in_group = inode_get_block_group_shift(sb, ino);
+	uint32_t block_group = inode_get_block_group(sb_info, ino);
+	uint32_t inode_index_in_group = inode_get_block_group_shift(sb_info, ino);
 
 	int ret;
 	// 如果ino超过了范围
@@ -135,21 +135,136 @@ failed:
 
 // qstr = &dentry->d_name
 // 注意inode_init_owner的版本号的变化
+// qstr在这里没有使用，因为还没插入目录项
 struct inode *XCraft_new_inode(handle_t *handle, struct inode *dir,
 							   const struct qstr *qstr, int mode){					
 	struct inode *inode = NULL;
-	struct XCraft_inode *disk_inode = NULL;
 	struct XCraft_inode_info *xi = NULL;
-	struct XCraft_super_block_info *sb_info = XCRAFT_SB(dir->i_sb);
+	struct super_block *sb = dir->i_sb;
+	struct XCraft_super_block_info *sb_info = XCRAFT_SB(sb);
 	struct XCraft_superblock *disk_sb = sb_info->s_super;
 	struct buffer_head *bh = NULL;
+	// 获取的inode的ino号，以及其需要的i_block[0]
+	uint32_t ino, bno;
+	// 返回结果
+	int ret;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
     struct timespec64 cur_time;
 #endif
 
 	// 检查文件的类型是否正确
+	if (!S_ISDIR(mode) && !S_ISREG(mode) && !S_ISLNK(mode)) {
+        pr_err(
+            "File type not supported (only directory, regular file and symlink "
+            "supported)\n");
+        return ERR_PTR(-EINVAL);
+    }
 
+	// 检查inode是否还有空余的
+	if(le32toh(disk_sb->s_free_inodes_count) == 0 || le32toh(disk_sb->s_free_blocks_count) == 0)
+		return ERR_PTR(-ENOSPC);
+
+	// 分配inode
+	// 返回0表示没有找到，因为根目录inode已经分配了
+	// 获取时要修改超级块以及块组描述符信息
+
+	// 要修改此获取函数
+	ino = get_free_inode(sb_info);
+
+	if(!ino)
+		return ERR_PTR(-ENOSPC);
+	// 获取ino对应的inode
+	inode = XCraft_iget(sb,ino);
+	if(IS_ERR(inode)){
+		ret = PTR_ERR(inode);
+		goto failed_ino;
+	}
+
+	// 首先将i_flags字段置0
+	xi = XCRAFT_I(inode);
+	xi->i_flags = 0;
+
+
+	if (S_ISLNK(mode)) {
+#if MNT_IDMAP_REQUIRED()
+        inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
+#elif USER_NS_REQUIRED()
+        inode_init_owner(&init_user_ns, inode, dir, mode);
+#else
+        inode_init_owner(inode, dir, mode);
+#endif
+        set_nlink(inode, 1);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+        cur_time = current_time(inode);
+        inode->i_atime = inode->i_mtime = cur_time;
+        inode_set_ctime_to_ts(inode, cur_time);
+#else
+        inode->i_ctime = inode->i_atime = inode->i_mtime = current_time(inode);
+#endif
+        inode->i_op = &XCraft_symlink_inode_operations;
+        return inode;
+    }
+
+
+	// 获取一个空闲的块号
+	// 获取时要修改超级块和块组描述符信息
+
+	// 要修改此获取函数
+	bno = get_free_block(sb_info);
+	if(!bno){
+		ret = -ENOSPC;
+		goto failed_inode;
+	}
+
+	#if MNT_IDMAP_REQUIRED()
+    inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
+#elif USER_NS_REQUIRED()
+    inode_init_owner(&init_user_ns, inode, dir, mode);
+#else
+    inode_init_owner(inode, dir, mode);
+#endif
+	inode->i_blocks = 1;
+
+	// 统一将目录和文件的i_block[0]置成bno，其他字段置为0
+	memset(xi->i_block,0,sizeof(xi->i_block));
+	if(S_ISDIR(mode)){
+		// 目录只初始化其i_block[0]
+		xi->i_block[0] = bno;
+		// 字段赋值存疑
+		inode->i_size = XCRAFT_BLOCK_SIZE;
+		inode->i_fop = &XCraft_dir_operations;
+		set_nlink(inode, 2);  // . and ..
+
+	}else if(S_ISREG(mode)){
+		
+		// 只最开始分配一个块
+		xi->i_block[0] = bno;
+		// 记录此时文件的大小，后续依据此来确定是否需要重新添加i_block
+		inode->i_size = 0;
+		inode->i_fop = &XCraft_file_operations;
+		inode->i_mapping->a_ops = &XCraft_aops;
+		set_nlink(inode, 1);
+	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    cur_time = current_time(inode);
+    inode->i_atime = inode->i_mtime = cur_time;
+    inode_set_ctime_to_ts(inode, cur_time);
+#else
+    inode->i_ctime = inode->i_atime = inode->i_mtime = current_time(inode);
+#endif
+
+    return inode;
+
+failed_inode:
+	iput(inode);
+
+failed_ino:
+	XCraft_put_inode(sb_info, ino);
+
+	return ERR_PTR(ret);
 }
 
 // hash tree添加目录项
@@ -157,26 +272,145 @@ static int XCraft_dx_add_entry(handle_t *handle, const struct qstr *qstr,
 							   struct inode *dir, struct inode *inode);
 
 // 提交目录项
+// 0表示添加目录项成功
 static int XCraft_add_entry(handle_t *handle, struct dentry *dentry,
 							struct inode *inode);
 
-// create
+
+// 哈希搜索目录项
+// dir是目录inode, qstr中存储了文件名，res_dir是我们最终要返回的对应此文件名的目录项
+// buffer_head为找到此目录项所在块的buffer_head
+// err是存储的返回的错误信息
+static struct buffer_head * XCraft_dx_find_entry(struct inode *dir,
+			struct qstr *entry, struct XCraft_dir_entry **res_dir,
+			int *err);
+
+
+
+// 搜索目录项，观察是否找到文件名对应的目录项
+// dir是目录inode, qstr中存储了文件名，res_dir是我们最终要返回的对应此文件名的目录项
+// buffer_head为找到此目录项所在块的buffer_head
+static struct buffer_head *XCraft_find_entry(struct inode *dir,
+					struct qstr *entry,
+					struct XCraft_dir_entry **res_dir);
+
+
+
+
+
+// 	create
 //  create file or dir
 //  in this dir
-#if XCraft_iop_version_judge()
-static int XCraft_create(struct user_namespace *mnt_userns, struct inode *dir,
-						 struct dentry *dentry, umode_t mode, bool excl)
+#if MNT_IDMAP_REQUIRED()
+static int XCraft_create(struct mnt_idmap *id,
+                           struct inode *dir,
+                           struct dentry *dentry,
+                           umode_t mode,
+                           bool excl)
+#elif USER_NS_REQUIRED()
+static int XCraft_create(struct user_namespace *ns,
+                           struct inode *dir,
+                           struct dentry *dentry,
+                           umode_t mode,
+                           bool excl)
 #else
 static int XCraft_create(struct inode *dir,
-						 struct dentry *dentry, umode_t mode, bool excl)
+                           struct dentry *dentry,
+                           umode_t mode,
+                           bool excl)
+#endif
+{
+	struct super_block *sb = dir->i_sb;
+	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
+	struct inode *inode;
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
+	int ret;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    struct timespec64 cur_time;
 #endif
 
-	// lookup
-	static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags);
+	// check filename length
+	if(strlen(dentry->d_name.name) > XCRAFT_NAME_LEN)
+		return -ENAMETOOLONG;
+
+	// 获取inode
+	inode = XCraft_new_inode(handle, dir, &dentry->d_name, mode);
+	if(IS_ERR(inode)){
+		ret = PTR_ERR(inode);
+		goto end;
+	}
+
+	// 获取inode_info
+	struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
+
+	// 目录inode我们要开始添加目录项
+	// ret 为0表示添加成功
+	ret = XCraft_add_entry(NULL, dentry, inode);
+	if(ret)
+		goto end_inode;
+	
+	return 0;
+
+end_inode:
+	// 释放inode中的i_block[0]
+	XCraft_put_block(sb_info, inode_info->i_block[0]);
+	// 释放inode
+	XCraft_put_inode(sb_info, inode->i_ino);
+	iput(inode);
+end:
+	return ret;
+
+}
+
+// lookup
+static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags){
+	struct super_block *sb = dir->i_sb;
+	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
+	struct XCraft_inode_info *inode_info = NULL;
+	struct inode *inode = NULL;
+	struct buffer_head *bh = NULL;
+	struct XCraft_disk_inode *disk_inode = NULL;
+	struct XCraft_dir_entry *de;
+	struct buffer_head *bh = NULL;
+	int ret;
+	
+	// 检查文件名长度
+	if(dentry->d_name.len > XCRAFT_NAME_LEN)
+		return ERR_PTR(-ENAMETOOLONG);
+
+	// 获取目录项
+	bh = XCraft_find_entry(dir, &dentry->d_name, &de);
+
+	// 由inode号获取inode
+	uint32_t ino = le32toh(de->inode);
+	// static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
+	inode = XCraft_iget(sb, ino);
+	if(IS_ERR(inode)){
+		ret = PTR_ERR(inode);
+			goto end;
+	}
+
+	//  更新dir中的相关时间信息
+	dir->i_atime = current_time(dir);
+	mark_inode_dirty(dir);
+
+	// fill the dentry with the inode
+	d_add(dentry, inode);
+
+end:
+	brelse(bh);
+	return NULL;
+}
 
 // link
 static int XCraft_link(struct dentry *old_dentry,
-					   struct inode *dir, struct dentry *dentry);
+					   struct inode *dir, struct dentry *dentry){
+	
+
+
+}
 
 // unlink
 static int XCraft_unlink(struct inode *dir, struct dentry *dentry);
@@ -214,8 +448,8 @@ static int XCraft_rename(struct inode *old_dir, struct dentry *old_dentry,
 						 unsigned int flags)
 #endif
 
-	// get_link
-	static const char *XCraft_get_link(struct dentry *dentry, struct inode *inode,
+// get_link
+static const char *XCraft_get_link(struct dentry *dentry, struct inode *inode,
 									   struct delayed_call *callback);
 
 const struct inode_operations XCraft_inode_operations = {
