@@ -64,14 +64,14 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     
 
     // caculate ino is beyond
-    uint32_t s_inodes_count = le32_to_cpu(disk_sb->s_inodes_count);
+    uint32_t s_inodes_count = le32toh(disk_sb->s_inodes_count);
     if (ino >= s_inodes_count)
         return 0;
 
     // get inode_size
-    uint32_t inode_size = le16_to_cpu(disk_sb->s_inode_size);
+    uint32_t inode_size = le16toh(disk_sb->s_inode_size);
     // get blocks_per_group
-    uint32_t blocks_per_group = le32_to_cpu(disk_sb->s_blocks_per_group);
+    uint32_t blocks_per_group = le32toh(disk_sb->s_blocks_per_group);
 
     // get inode_block
     uint32_t inode_block_begin = (1 + XCRAFT_DESC_LIMIT_blo) + inode_group * blocks_per_group + 2;
@@ -84,26 +84,26 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     disk_inode = (struct XCraft_inode *)bh->b_data;
     disk_inode += inode_shift_in_block;
     // 字节序转换存疑?
-    disk_inode->i_mode = cpu_to_le16(inode->i_mode);
-    disk_inode->i_uid = cpu_to_le16(i_uid_read(inode));
-    disk_inode->i_gid = cpu_to_le16(i_gid_read(inode));
-    disk_inode->i_size_lo = cpu_to_le32(inode->i_size);
+    disk_inode->i_mode = htole16(inode->i_mode);
+    disk_inode->i_uid = htole16(i_uid_read(inode));
+    disk_inode->i_gid = htole16(i_gid_read(inode));
+    disk_inode->i_size_lo = htole32(inode->i_size);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
     struct timespec64 ctime = inode_get_ctime(inode);
-    disk_inode->i_ctime = cpu_to_le32(ctime.tv_sec);
+    disk_inode->i_ctime = htole32(ctime.tv_sec);
 #else
-    disk_inode->i_ctime = cpu_to_le32(inode->i_ctime.tv_sec);
+    disk_inode->i_ctime = htole32(inode->i_ctime.tv_sec);
 #endif
 
-    disk_inode->i_atime = cpu_to_le32(inode->i_atime.tv_sec);
-    disk_inode->i_mtime = cpu_to_le32(inode->i_mtime.tv_sec);
-    disk_inode->i_dtime = cpu_to_le32(xi->i_dtime);
-    disk_inode->i_blocks_lo = cpu_to_le32(inode->i_blocks);
-    disk_inode->i_links_count = cpu_to_le16(inode->i_nlink);
-    disk_inode->i_flags = cpu_to_le32(xi->i_flags);
+    disk_inode->i_atime = htole32(inode->i_atime.tv_sec);
+    disk_inode->i_mtime = htole32(inode->i_mtime.tv_sec);
+    disk_inode->i_dtime = htole32(xi->i_dtime);
+    disk_inode->i_blocks_lo = htole32(inode->i_blocks);
+    disk_inode->i_links_count = htole16(inode->i_nlink);
+    disk_inode->i_flags = htole32(xi->i_flags);
     for(int i=0;i<XCRAFT_N_BLOCK;i++)
-        disk_inode->i_block[i] = cpu_to_le16(xi->i_block[i]);
+        disk_inode->i_block[i] = htole16(xi->i_block[i]);
     strncpy(disk_inode->i_data, xi->i_data,sizeof(xi->i_data));
     mark_buffer_dirty(bh);
     sync_dirty_buffer(bh);
@@ -172,11 +172,11 @@ static int XCraft_statfs(struct dentry *dentry, struct kstatfs *buf){
     struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
     buf->f_type = XCRAFT_MAGIC;
     buf->f_bsize = XCRAFT_BLOCK_SIZE;
-    buf->f_blocks = le32_to_cpu(sb_info->s_super->s_blocks_count);
-    buf->f_bfree = le32_to_cpu(sb_info->s_super->s_free_blocks_count);
-    stat->f_bavail = le32_to_cpu(sb_info->s_super->s_free_blocks_count);
-    stat->f_files = le32_to_cpu(sb_info->s_super->s_inodes_count - sb_info->s_super->s_free_inodes_count);
-    stat->f_ffree = le32_to_cpu(sb_info->s_super->s_free_inodes_count);
+    buf->f_blocks = le32toh(sb_info->s_super->s_blocks_count);
+    buf->f_bfree = le32toh(sb_info->s_super->s_free_blocks_count);
+    stat->f_bavail = le32toh(sb_info->s_super->s_free_blocks_count);
+    stat->f_files = le32toh(sb_info->s_super->s_inodes_count - sb_info->s_super->s_free_inodes_count);
+    stat->f_ffree = le32toh(sb_info->s_super->s_free_inodes_count);
     stat->f_namelen = XCRAFT_NAME_LEN;
 }
 
@@ -225,15 +225,15 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
         ret = -ENOMEM;
         goto out_sb_info;
     }
-    sb_info->s_blocks_per_group = le32_to_cpu(disk_sb->s_blocks_per_group);
-    sb_info->s_inodes_per_group = le32_to_cpu(disk_sb->s_inodes_per_group);
+    sb_info->s_blocks_per_group = le32toh(disk_sb->s_blocks_per_group);
+    sb_info->s_inodes_per_group = le32toh(disk_sb->s_inodes_per_group);
     sb_info->s_desc_per_block = XCRAFT_GROUP_DESCS_PER_BLOCK;
-    sb_info->s_groups_count = le32_to_cpu(disk_sb->s_groups_count);
+    sb_info->s_groups_count = le32toh(disk_sb->s_groups_count);
     sb_info->s_sbh = bh;
     sb_info->s_super = disk_sb;
     sb->s_fs_info = sb_info;
-    sb_info->s_last_group_inodes = le32_to_cpu(disk_sb->s_inodes_count)-sb_info->s_inodes_per_group*(sb_info->s_groups_count-1);
-    sb_info->s_last_group_blocks = le32_to_cpu(disk_sb->s_last_group_blocks);
+    sb_info->s_last_group_inodes = le32toh(disk_sb->s_inodes_count)-sb_info->s_inodes_per_group*(sb_info->s_groups_count-1);
+    sb_info->s_last_group_blocks = le32toh(disk_sb->s_last_group_blocks);
     // sb_info->s_group_desc = NULL;
 
     // get s_gdb_count and s_group_desc
