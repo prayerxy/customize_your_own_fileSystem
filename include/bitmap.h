@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include "XCraft.h"
+#include "inode.h"
 #include "gb.h"
 
 
@@ -110,11 +111,32 @@ out:
     else return NULL;
 }
 
+//inode_begin是此块组的第一个inode号
+static inline uint32_t get_first_free_bits(unsigned long *freemap,
+                                           unsigned long size,
+                                           uint32_t len,uint32_t inode_begin)
+{
+
+    uint32_t bit, prev = 0, count = 0;
+    for_each_set_bit (bit, freemap, size) {
+        if (prev != bit - 1)
+            count = 0;
+        prev = bit;
+        if (++count == len) {
+            bitmap_clear(freemap, bit - len + 1, len);
+            return (bit - len + 1)+inode_begin;
+        }
+    }
+    return 0;
+}
 
 //寻找现有可用块组中是否有空闲的inode
 //如果没有，需要新建一个块组 更改块组描述符为Init状态
 // get first free inode
 
+/* Return an unused inode number and mark it used.
+ * Return 0 if no free inode was found.
+ */
 static inline uint32_t get_free_inode(struct XCraft_superblock_info *sbi){
     xcraft_group_t group = sbi->s_La_init_group;
     struct buffer_head *bh = NULL;
@@ -122,7 +144,7 @@ static inline uint32_t get_free_inode(struct XCraft_superblock_info *sbi){
     struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
     if(group_free_inodes_count(sbi, desc) == 0){
         //先遍历所有块组
-        for(int i = 0; i < sbi->s_groups_count; i++){
+        for(int i = 0; i < sbi->s_La_init_group; i++){
             desc = get_group_desc(sbi, i, bh);
             if(group_free_inodes_count(sbi, desc) > 0){
                 group = i;
@@ -131,36 +153,122 @@ static inline uint32_t get_free_inode(struct XCraft_superblock_info *sbi){
         }
         if(group_free_inodes_count(sbi, desc) == 0){
             desc = new_gb_desc(sbi,bh);
+            group = sbi->s_La_init_group;
             if(!desc)//没有更多的块组描述符
                 return 0;
         }
     }
     //找到了空闲的inode及块组描述符desc
-    unsigned long*ifree_bitmap=kzalloc(XCRAFT_IFREE_PER_GROUP_BLO,GFP_KERNEL);
-
-  
-    
+    // unsigned long*ifree_bitmap=kzalloc(XCRAFT_IFREE_PER_GROUP_BLO,GFP_KERNEL);
+    uint32_t inode_begin=0;
+    if(group==0)
+        inode_begin=0;
+    else//说明不是第一个块组
+        inode_begin=XCRAFT_INODES_PER_GROUP*(group);
+    uint32_t ret=get_first_free_bits(sbi->s_ibmap_info[group]->ifree_bitmap,desc->bg_nr_inodes,1,inode_begin);
+    if(ret){
+        desc->bg_free_inodes_count=htole16(le16toh(desc->bg_free_inodes_count)-1);
+        uint32_t free_inodes_count=le32toh(sbi->s_super->s_free_inodes_count);
+        free_inodes_count--;
+        sbi->s_super->s_free_inodes_count=htole32(free_inodes_count);
+        return ret;
+    }
+    return 0; 
 }
 
-// get first free block
-static inline uint32_t get_free_block(struct XCraft_superblock_info *sbi);
 
-
-// get len free inodes
-static inline int get_len_free_inodes(struct XCraft_superblock_info *sbi, int len);
-
-
+/* Return 'len' unused block(s) number and mark it used.
+ * Return 0 if no enough free block(s) were found.
+ */
 // get len free blocks
-static inline int get_len_free_blocks(struct XCraft_superblock_info *sbi, int len);
+static inline int get_free_blocks(struct XCraft_superblock_info *sbi, int len){
+    xcraft_group_t group = sbi->s_La_init_group;
+    struct buffer_head *bh = NULL;
+    struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
+    if(group_free_blocks_count(sbi, desc) < len){
+        //先遍历所有块组
+        for(int i = 0; i < sbi->s_La_init_group; i++){
+            desc = get_group_desc(sbi, i, bh);
+            if(group_free_blocks_count(sbi, desc) >= len){
+                group = i;
+                break;
+            }
+        }
+        if(group_free_blocks_count(sbi, desc) < len){
+            desc = new_gb_desc(sbi,bh);
+            group = sbi->s_La_init_group;
+            if(!desc)//没有更多的块组描述符
+                return 0;
+        }
+    }
+    //找到了空闲的block及块组描述符desc
+    uint32_t blocks_begin=0;
+    if(group==0)
+        blocks_begin=0;
+    else//说明不是第一个块组
+        blocks_begin=XCRAFT_BLOCKS_PER_GROUP*(group);
+    uint32_t ret=get_first_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap,desc->bg_nr_blocks,len,blocks_begin);
+    if(ret){
+        //不连续Len会报错 待解决todo
+        desc->bg_free_blocks_count=htole16(le16toh(desc->bg_free_blocks_count)-len);
+        uint32_t free_blocks_count=le32toh(sbi->s_super->s_free_blocks_count);
+        free_blocks_count-=len;
+        sbi->s_super->s_free_blocks_count=htole32(free_blocks_count);
+        return ret;
+    }
+    return 0; 
+}
+
+
+/* Mark the 'len' bit(s) from i-th bit in freemap as free (i.e. 1) */
+static inline int put_free_bits(unsigned long *freemap,
+                                unsigned long size,
+                                uint32_t i,
+                                uint32_t len)
+{
+    /* i is greater than freemap size */
+    if (i + len - 1 > size)
+        return -1;
+
+    bitmap_set(freemap, i, len);
+
+    return 0;
+}
 
 // 将一个inode置为不再使用，即空闲
-static inline void XCraft_put_inode(struct XCraft_superblock_info *sbi, uint32_t ino);
+static inline void put_inode(struct XCraft_superblock_info *sbi, uint32_t ino){
+
+    xcraft_group_t group = inode_get_block_group(sbi, ino);
+    uint32_t offset = inode_get_block_group_shift(sbi, ino);
+    struct buffer_head *bh = NULL;
+    struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
+    if(put_free_bits(sbi->s_ibmap_info[group]->ifree_bitmap, desc->bg_nr_inodes, offset, 1))
+        return;
+    
+    desc->bg_free_inodes_count=htole16(le16toh(desc->bg_free_inodes_count)+1);
+    uint32_t free_inodes_count=le32toh(sbi->s_super->s_free_inodes_count);
+    free_inodes_count++;
+    sbi->s_super->s_free_inodes_count=htole32(free_inodes_count);
+
+}
 
 // 将连续len个block置为不再使用，即空闲
 // uint32_t block为起始块号
-static inline void XCraft_put_block(struct XCraft_superblock_info *sbi, uint32_t block, int len);
+static inline void put_blocks(struct XCraft_superblock_info *sbi, uint32_t block, int len){
+    xcraft_group_t group = get_block_group(sbi, block);
+    uint32_t offset = get_block_group_shift(sbi, block);
+    struct buffer_head *bh = NULL;
+    struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
+    if(put_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap, desc->bg_nr_blocks, offset, len))
+        return;
+    
+    desc->bg_free_blocks_count=htole16(le16toh(desc->bg_free_blocks_count)+len);
+    uint32_t free_blocks_count=le32toh(sbi->s_super->s_free_blocks_count);
+    free_blocks_count+=len;
+    sbi->s_super->s_free_blocks_count=htole32(free_blocks_count);
+}
 
 
 
 
-#endif
+#endif /* XCRAFT_BITMAP_H*/
