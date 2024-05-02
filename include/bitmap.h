@@ -1,8 +1,4 @@
 
-#ifndef XCRAFT_BITMAP_H
-#define XCRAFT_BITMAP_H
-
-#include <stdlib.h>
 
 #ifndef XCRAFT_BITMAP_H
 #define XCRAFT_BITMAP_H
