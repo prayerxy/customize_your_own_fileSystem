@@ -129,7 +129,7 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
     group_desc[0].bg_block_bitmap = htole32(2+XCRAFT_DESC_LIMIT_blo);
     group_desc[0].bg_inode_table = htole32(3+XCRAFT_DESC_LIMIT_blo);//inode_bitmap与block_bitmap只占一个块
     //root inode索引一个数据块
-    group_desc[0].bg_free_blocks_count = htole16(XCRAFT_BLOCKS_PER_GROUP -1-XCRAFT_DESC_LIMIT_blo-2-XCRAFT_inodes_str_blocks_PER-1);
+    group_desc[0].bg_free_blocks_count = sb->xcraft_sb.s_free_blocks_count;
     group_desc[0].bg_free_inodes_count = htole16(XCRAFT_INODES_PER_GROUP -1);
     group_desc[0].bg_used_dirs_count = htole16(1);//根目录
     group_desc[0].bg_flags = htole16(0);//初始化

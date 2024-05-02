@@ -20,10 +20,10 @@
 #define MNT_IDMAP_REQUIRED() LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
 
 // desc flags
-#define XCraft_BG_INODE_UNINIT	0x0001 /* Inode table/bitmap not in use */
-#define XCraft_BG_BLOCK_UNINIT	0x0002 /* Block bitmap not in use */
+#define XCraft_BG_INODE_INIT	0x0001 /* Inode table/bitmap not in use */
+#define XCraft_BG_BLOCK_INIT	0x0002 /* Block bitmap not in use */
 #define Xcraft_BG_INODE_ZEROED	0x0004 /* On-disk itable initialized to zero */
-
+#define XCraft_BG_ISINIT(flag) (flag&XCraft_BG_INODE_INIT)&&(flag&XCraft_BG_BLOCK_INIT)
 // inode flags
 #define XCraft_INODE_HASH_TREE 0x0001
 #define XCraft_INODE_HASH_TREE_IS(flag) flag & XCraft_INODE_HASH_TREE
@@ -79,8 +79,6 @@ struct XCraft_inode{
 */
 #define XCRAFT_inodes_str_blocks_PER (XCRAFT_INODES_PER_GROUP)/XCRAFT_INODES_PER_BLOCK
 
-//注意这里一定是整除 因为在write_super加上Mod
-#define XCRAFT_inodes_str_blocks_last(sb) (le32_to_cpu((sb)->s_inodes_count) - (le32_to_cpu((sb)->s_groups_count) - 1) * le32_to_cpu((sb)->s_inodes_per_group)) / XCRAFT_INODES_PER_BLOCK
 struct XCraft_superblock{
     __le32 s_inodes_count; /* number of inodes */
     __le32 s_blocks_count; /* number of blocks */
@@ -93,6 +91,9 @@ struct XCraft_superblock{
     __le16 s_magic; /* magic number */
     __le16 s_inode_size; /* inode size */
 };
+
+//注意这里一定是整除 因为在write_super加上Mod
+#define XCRAFT_inodes_str_blocks_last(sb) (le32_to_cpu((sb)->s_inodes_count) - (le32_to_cpu((sb)->s_groups_count) - 1) * le32_to_cpu((sb)->s_inodes_per_group)) / XCRAFT_INODES_PER_BLOCK
 
 struct XCraft_group_desc{
     __le32 bg_block_bitmap; /* block bitmap block 物理块号*/

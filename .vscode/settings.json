@@ -15,6 +15,7 @@
         "stdint.h": "c",
         "little_endian.h": "c",
         "endian.h": "c",
-        "fs.h": "c"
+        "fs.h": "c",
+        "inode.h": "c"
     }
 }

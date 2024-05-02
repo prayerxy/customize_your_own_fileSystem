@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/statfs.h>
 #include "../include/XCraft.h"
+#include "../include/inode.h"
 
 // slab cache for XCraft_inode_info
 static struct kmem_cache *XCraft_inode_cache;
@@ -57,9 +58,9 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     struct buffer_head *bh;
     uint32_t ino = inode->i_ino;
     // block_group num
-    uint32_t inode_group = ino / (sb_info->s_inodes_per_group);
+    uint32_t inode_group = inode_get_block_group(sb, ino);
     // get ino in group
-    uint32_t inode_shift_in_group = ino % (sb_info->s_inodes_per_group);
+    uint32_t inode_shift_in_group = inode_get_block_group_shift(sb, ino);
 
     // caculate ino is beyond
     uint32_t s_inodes_count = le32_to_cpu(disk_sb->s_inodes_count);
@@ -127,21 +128,28 @@ static void XCraft_put_super(struct super_block *sb){
 // sync_fs
 static int XCraft_sync_fs(struct super_block *sb, int wait){
     struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
-    struct buffer_head *bh = sb_info->s_sbh;
-    struct  XCraft_superblock *disk_sb = (struct XCraft_superblock *)bh->b_data;
-    disk_sb->s_inodes_count = cpu_to_le32(sb->s_inodes_count);
-    disk_sb->s_blocks_count = cpu_to_le32(sb->s_blocks_count);
-    disk_sb->s_free_blocks_count = cpu_to_le32(sb->s_free_blocks_count);
-    disk_sb->s_free_inodes_count = cpu_to_le32(sb->s_free_inodes_count);
+    struct XCraft_superblock *ssb=sb_info->s_super;
 
+    
+    struct  XCraft_superblock *disk_sb;
+
+    disk_sb=(struct XCraft_superblock*)sb_info->s_sbh->b_data;
+
+    disk_sb->s_inodes_count = ssb->s_inodes_count;
+    disk_sb->s_blocks_count = ssb->s_blocks_count;
+    disk_sb->s_free_blocks_count = ssb->s_free_blocks_count;
+    disk_sb->s_free_inodes_count = ssb->s_free_inodes_count;
+    disk_sb->s_blocks_per_group = ssb->s_blocks_per_group;
+    disk_sb->s_inodes_per_group = ssb->s_inodes_per_group;
+    disk_sb->s_groups_count = ssb->s_groups_count;
+    disk_sb->s_last_group_blocks = ssb->s_last_group_blocks;
 
     // 回写super block
-    mark_buffer_dirty(bh);
+    mark_buffer_dirty(sb_info->s_sbh);
     if (wait)
-        sync_dirty_buffer(bh);
-    brelse(bh);
+        sync_dirty_buffer(sb_info->s_sbh);
 
-    // 回写块组描述符和bitmap
+    // 回写块组描述符
     struct buffer_head *bh1 = NULL,*bh2 = NULL;
     for(int i=0;i<sb_info->s_gdb_count;i++){
         bh1 = sb_bread(sb, i+1);
@@ -186,7 +194,7 @@ static int
 XCraft_fill_super(struct super_block *sb, void *data, int silent){
     struct buffer_head *bh = NULL, *bh1 = NULL;
     struct XCraft_superblock_info *sb_info = NULL;
-    struct XCraft_superblock *disk_sb = NULL;
+    struct XCraft_superblock *disk_sb = kzalloc(sizeof(struct XCraft_superblock), GFP_KERNEL);
     struct inode* root_inode = NULL;
     int ret = 0;
 
@@ -200,7 +208,8 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     bh = sb_bread(sb, 0);
     if(!bh)
         return -EIO;
-    disk_sb = (struct XCraft_superblock *)bh->b_data;
+    struct XCraft_superblock *disk_sb_tmp = (struct XCraft_superblock *)bh->b_data;
+    memcpy((char *)disk_sb, (char *)disk_sb_tmp, sizeof(struct XCraft_superblock));
 
     // check magic
     if(disk_sb->s_magic != sb->s_magic){
@@ -217,7 +226,6 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     }
     sb_info->s_blocks_per_group = le32_to_cpu(disk_sb->s_blocks_per_group);
     sb_info->s_inodes_per_group = le32_to_cpu(disk_sb->s_inodes_per_group);
-    sb_info->s_gdb_count = le32_to_cpu(disk_sb->s_gdb_count);
     sb_info->s_desc_per_block = XCRAFT_GROUP_DESCS_PER_BLOCK;
     sb_info->s_groups_count = le32_to_cpu(disk_sb->s_groups_count);
     sb_info->s_sbh = bh;
@@ -229,6 +237,7 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
 
     // get s_gdb_count and s_group_desc
     unsigned long gdb_count = 0;
+    gdb_count= ceil_div(sb_info->s_groups_count, sb_info->s_desc_per_block);
     struct buffer_head** group_desc = kzalloc(sizeof(struct buffer_head*) * XCRAFT_DESC_LIMIT_blo, GFP_KERNEL);
     
     for(int i=0;i<XCRAFT_DESC_LIMIT_blo;i++){
@@ -238,14 +247,8 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
             ret = -EIO;
             goto out_free_group_desc;
         }
-        struct XCraft_group_desc *disk_gdb = (struct XCraft_group_desc *)bh1->b_data;
-        for(int j=0;j<XCRAFT_GROUP_DESCS_PER_BLOCK;j++){
-            disk_gdb+=j;
-            if(XCraft_DESC_IS_INIT(le16_to_cpu(disk_gdb->bg_flags)))
-                gdb_count++;
-        }
     }
-    sb_info->s_gdb_count = gdb_count/XCRAFT_GROUP_DESCS_PER_BLOCK + 1;
+    sb_info->s_gdb_count = gdb_count;//组描述符占多少个块
     sb_info->s_group_desc = group_desc;
 
     // init root inode

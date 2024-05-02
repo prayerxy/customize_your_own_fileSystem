@@ -1,13 +1,9 @@
-#define pr_diary(xcraft) KBUILD_MODNAME ": " xcraft
-
-#include <linux/buffer_head.h>
-#include <linux/fs.h>
-#include <linux/kernel.h>
-#include <linux/module.h>
-
+#include "../include/inode.h"
 #include "../include/bitmap.h"
-#include "../include/XCraft.h"
-#include "../include/hash.h"
+#include <endian.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 // additional
 // 获取块组描述符
 //
@@ -35,9 +31,9 @@ static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	struct XCraft_super_block_info *sb_info = XCRAFT_SB(sb);
 	struct XCraft_superblock *disk_sb = sb_info->s_super;
 	struct buffer_head *bh = NULL;
-	//算法有问题，待改 todo
-	uint32_t block_group = ino / (sb_info->s_inodes_per_group);
-	uint32_t inode_index_in_group = ino % (sb_info->s_inodes_per_group);
+
+	uint32_t block_group = inode_get_block_group(sb, ino);
+	uint32_t inode_index_in_group = inode_get_block_group_shift(sb, ino);
 
 	int ret;
 	// 如果ino超过了范围
