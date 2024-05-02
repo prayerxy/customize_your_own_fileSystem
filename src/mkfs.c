@@ -139,6 +139,12 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
     group_desc[0].bg_free_inodes_count = htole16(XCRAFT_INODES_PER_GROUP -1);
     group_desc[0].bg_used_dirs_count = htole16(1);//根目录
     group_desc[0].bg_flags = htole16(XCraft_BG_INODE_INIT| XCraft_BG_BLOCK_INIT);//初始化
+    printf(
+        " Initialize first bl_group group_desc success\n"
+        " wrote %u group_desc blocks\n"
+        "\t group_desc size=%ld B\n"
+        "\t group[0] inode count=%u\n",
+        group_desc_blocks,sizeof(struct XCraft_group_desc),group_desc[0].bg_nr_inodes);
     for(uint32_t i=1; i<sb->xcraft_sb.s_groups_count; i++){
         group_desc[i].bg_inode_bitmap = 0;
         group_desc[i].bg_block_bitmap = 0;
@@ -153,10 +159,12 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
             group_desc[i].bg_nr_blocks = sb->xcraft_sb.s_last_group_blocks;
             uint16_t tmp=XCRAFT_inodes_str_blocks_last(&(sb->xcraft_sb))*XCRAFT_INODES_PER_BLOCK;
             group_desc[i].bg_nr_inodes = htole16(tmp);
+            printf("\t last group inode count=%u\n",tmp);
         }
         else{
             group_desc[i].bg_nr_blocks = sb->xcraft_sb.s_blocks_per_group;
             group_desc[i].bg_nr_inodes = sb->xcraft_sb.s_inodes_per_group;
+            printf("\t group[%u] inode count=%u\n",i,sb->xcraft_sb.s_inodes_per_group);
         }
     }
     int ret=write(fd, group_desc, group_desc_blocks * XCRAFT_BLOCK_SIZE);
