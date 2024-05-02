@@ -5,9 +5,9 @@
 #define XCRAFT_H
 #include <linux/types.h>
 #include <linux/version.h>
+#include <endian.h>
 #include <stdint.h>
-#include <stdint.h>
-#define XCRAFT_MAGIC 0x58435241 /* "XCRA" */
+#define XCRAFT_MAGIC 0x1234 /* "XCRA" */
 #define XCRAFT_BLOCK_SIZE (1 << 12) /* 4 KiB */
 #define XCRAFT_N_BLOCK 15   //2个直接索引块 2个1级间接索引块 1个2级间接索引块
 #define XCRAFT_NAME_LEN 255
@@ -27,20 +27,27 @@
 #define XCraft_INODE_HASH_TREE 0x0001
 #define XCraft_INODE_HASH_TREE_IS(flag) flag & XCraft_INODE_HASH_TREE
 
+//ifree_per_group_blo 
+#define XCRAFT_IFREE_PER_GROUP_BLO 1
+//bfree_per_group_blo
+#define XCRAFT_BFREE_PER_GROUP_BLO(blocks) ceil_div(blocks,8*XCRAFT_BLOCK_SIZE)
 /* todo
 XCraft partition layout
  * +---------------+
  * |  superblock   |  1 block
  * +---------------+
- * |  descriptor   |  sb->nr_group_descs blocks
+ * |  descriptor   |  sb->s_gdb_count blocks
  * +---------------+
- * | ifree bitmap  |  sb->nr_ifree_blocks blocks
+ * | ifree bitmap  |  group_0
  * +---------------+
- * | bfree bitmap  |  sb->nr_bfree_blocks blocks
+ * | bfree bitmap  |  XCRAFT_BFREE_PER_GROUP_BLO blocks
  * +---------------+
- * |    data       |
- * |      blocks   |  rest of the blocks
+ * |  inode_str_   |  
+ * |        blocks |  bg_nr_inodes/XCRAFT_INODES_PER_BLOCK   blocks
  * +---------------+
+ * |  data blocks  |  bg_nr_blocks-1-XCRAFT_BFREE_PER_GROUP_BLO-inode_str_blocks    blocks
+ * +---------------+
+ * |  ...other bg  |  ...
  */
 
 static inline uint32_t ceil_div(uint32_t a, uint32_t b){
@@ -76,8 +83,7 @@ struct XCraft_inode{
     最后一个块组的inode_store不一定是XCRAFT_inodes_str_blocks_PER，
     而是(s_inodes_count-(s_groups_count-1)*s_inodes_per_group)/XCRAFT_INODES_PER_BLOCK
 */
-#define XCRAFT_inodes_str_blocks_PER (XCRAFT_INODES_PER_GROUP)/XCRAFT_INODES_PER_BLOCK
-
+#define XCRAFT_inodes_str_blocks_PER XCRAFT_INODES_PER_GROUP/XCRAFT_INODE_SIZE
 struct XCraft_superblock{
     __le32 s_inodes_count; /* number of inodes */
     __le32 s_blocks_count; /* number of blocks */
@@ -92,12 +98,14 @@ struct XCraft_superblock{
 };
 
 //注意这里一定是整除 因为在write_super加上Mod
-#define XCRAFT_inodes_str_blocks_last(sb) (le32_to_cpu((sb)->s_inodes_count) - (le32_to_cpu((sb)->s_groups_count) - 1) * le32_to_cpu((sb)->s_inodes_per_group)) / XCRAFT_INODES_PER_BLOCK
+#define XCRAFT_inodes_str_blocks_last(sb) (le32toh((sb)->s_inodes_count) - (le32toh((sb)->s_groups_count) - 1) * le32toh((sb)->s_inodes_per_group)) / XCRAFT_INODES_PER_BLOCK
 
 struct XCraft_group_desc{
     __le32 bg_block_bitmap; /* block bitmap block 物理块号*/
     __le32 bg_inode_bitmap; /* inode bitmap block 物理块号*/
     __le32 bg_inode_table; /* 物理块号*/
+    __le16 bg_nr_inodes; /* number of inodes in this group */
+    __le16 bg_nr_blocks; /* number of blocks in this group */
     __le16 bg_free_blocks_count; /* number of free blocks */
     __le16 bg_free_inodes_count; /* number of free inodes */
     __le16 bg_used_dirs_count; /* number of directories */

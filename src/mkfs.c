@@ -9,13 +9,12 @@
 #include <linux/fs.h>
 #include <unistd.h>
 #include <errno.h>
-#include <linux/kernel.h>
 #include "../include/XCraft.h"
 
 struct superblock_padding{
     struct XCraft_superblock xcraft_sb;
     char padding[4060];//4096-36
-}
+};
 
 
 
@@ -109,7 +108,7 @@ static struct superblock_padding *write_superblock(int fd, struct stat *fstats){
 // 初始化组描述符 写到磁盘上
 // group_desc可能占用多个块 在main函数算出需要多少块
 static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
-    uint32_t group_desc_size = sb->s_groups_count * sizeof(struct XCraft_group_desc);
+    uint32_t group_desc_size = sb->xcraft_sb.s_groups_count * sizeof(struct XCraft_group_desc);
     //计算desc需要多少块
     uint32_t group_desc_blocks = ceil_div(group_desc_size, XCRAFT_BLOCK_SIZE);
     //限制最大块数量
@@ -128,12 +127,15 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
     group_desc[0].bg_inode_bitmap = htole32(1+XCRAFT_DESC_LIMIT_blo);
     group_desc[0].bg_block_bitmap = htole32(2+XCRAFT_DESC_LIMIT_blo);
     group_desc[0].bg_inode_table = htole32(3+XCRAFT_DESC_LIMIT_blo);//inode_bitmap与block_bitmap只占一个块
+    
+    group_desc[0].bg_nr_blocks = sb->xcraft_sb.s_blocks_per_group;
+    group_desc[0].bg_nr_inodes = sb->xcraft_sb.s_inodes_per_group;
     //root inode索引一个数据块
     group_desc[0].bg_free_blocks_count = sb->xcraft_sb.s_free_blocks_count;
     group_desc[0].bg_free_inodes_count = htole16(XCRAFT_INODES_PER_GROUP -1);
     group_desc[0].bg_used_dirs_count = htole16(1);//根目录
     group_desc[0].bg_flags = htole16(XCraft_BG_INODE_INIT| XCraft_BG_BLOCK_INIT);//初始化
-    for(uint32_t i=1; i<sb->s_groups_count; i++){
+    for(uint32_t i=1; i<sb->xcraft_sb.s_groups_count; i++){
         group_desc[i].bg_inode_bitmap = 0;
         group_desc[i].bg_block_bitmap = 0;
         group_desc[i].bg_inode_table = 0;
@@ -141,6 +143,17 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
         group_desc[i].bg_free_inodes_count = 0;
         group_desc[i].bg_used_dirs_count = 0;
         group_desc[i].bg_flags = 0;//bl与inode未初始化
+        if(i == sb->xcraft_sb.s_groups_count-1){
+            //最后一个块组的块数不一定是s_blocks_per_group
+            //最后一个块组的inode_store不一定是XCRAFT_inodes_str_blocks_PER
+            group_desc[i].bg_nr_blocks = sb->xcraft_sb.s_last_group_blocks;
+            uint16_t tmp=XCRAFT_inodes_str_blocks_last(&(sb->xcraft_sb))*XCRAFT_INODES_PER_BLOCK;
+            group_desc[i].bg_nr_inodes = htole16(tmp);
+        }
+        else{
+            group_desc[i].bg_nr_blocks = sb->xcraft_sb.s_blocks_per_group;
+            group_desc[i].bg_nr_inodes = sb->xcraft_sb.s_inodes_per_group;
+        }
     }
     int ret=write(fd, group_desc, group_desc_blocks * XCRAFT_BLOCK_SIZE);
     if(ret != group_desc_blocks * XCRAFT_BLOCK_SIZE){
@@ -189,6 +202,7 @@ static int XCraft_write_block_bitmap(int fd, struct superblock_padding *sb){
     uint64_t*bfree=(uint64_t *)block_bitmap;
 
     memset(bfree, 0xff, XCRAFT_BLOCK_SIZE);
+    uint32_t i=0;
     while(nr_used){
         uint64_t line = 0xffffffffffffffff;
         //从低位开始清0 直至清除nr_used个位
@@ -252,8 +266,8 @@ static int XCraft_write_inode_store(int fd, struct superblock_padding *sb){
     printf(
         " Initialize first bl_group inode_store success\n"
         "wrote %u inode_store blocks\n"
-        "\t inode size=%ld B\n"
-        i,sizoef(struct XCraft_inode));
+        "\t inode size=%ld B\n",
+        i,sizeof(struct XCraft_inode));
     free(inode_store);
     return 0;
     
@@ -317,38 +331,4 @@ int main(int argc, char **argv){
         free(sb);
         close(fd);
         return EXIT_FAILURE;
-    }
-    //写一个块组的inode_bitmap
-    if(XCraft_write_inode_bitmap(fd, sb)){
-        perror("write_inode_bitmap() failed");
-        free(sb);
-        close(fd);
-        return EXIT_FAILURE;
-    }
-    //写第一个块组的block_bitmap
-    if(XCraft_write_block_bitmap(fd, sb)){
-        perror("write_block_bitmap() failed");
-        free(sb);
-        close(fd);
-        return EXIT_FAILURE;
-    }
-    //写第一个块组的inode_store
-    if(XCraft_write_inode_store(fd, sb)){
-        perror("write_inode_store() failed");
-        free(sb);
-        close(fd);
-        return EXIT_FAILURE;
-    }
-    if(XCraft_delayed_initialize(fd, sb)){
-        perror("delayed_initialize() failed");
-        free(sb);
-        close(fd);
-        return EXIT_FAILURE;
-    }
-    free(sb);
-    close(fd);
-    return 0;
-}
-
-
-
+  
