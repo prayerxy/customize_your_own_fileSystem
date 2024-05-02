@@ -225,7 +225,7 @@ static int XCraft_write_block_bitmap(int fd, struct superblock_padding *sb){
         bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32toh(sb->xcraft_sb.s_last_group_blocks));
     }
     else bfree_blo=1;
-    char *block_bitmap = malloc(XCRAFT_BLOCK_SIZE);
+    char *block_bitmap = malloc(XCRAFT_BLOCK_SIZE*bfree_blo);
     if(!block_bitmap){
         perror("malloc block_bitmap failed");
         return -1;
@@ -233,7 +233,7 @@ static int XCraft_write_block_bitmap(int fd, struct superblock_padding *sb){
     //超级块+组描述符+inode_bitmap+block_bitmap+inode_store+根目录inode索引的数据块
     uint32_t nr_used=1+XCRAFT_DESC_LIMIT_blo+1+bfree_blo+XCRAFT_inodes_str_blocks_PER+1;
     uint64_t*bfree=(uint64_t *)block_bitmap;
-    memset(bfree, 0xff, XCRAFT_BLOCK_SIZE);
+    memset(bfree, 0xff, XCRAFT_BLOCK_SIZE*bfree_blo);
     uint32_t i=0;
     while(nr_used){
         uint64_t line = 0xffffffffffffffff;
@@ -247,42 +247,13 @@ static int XCraft_write_block_bitmap(int fd, struct superblock_padding *sb){
         bfree[i] = htole64(line);
         i++;
     }
-    int ret=write(fd, bfree, XCRAFT_BLOCK_SIZE);
-    if(ret!=XCRAFT_BLOCK_SIZE){
+    int ret=write(fd, bfree, XCRAFT_BLOCK_SIZE*bfree_blo);
+    if(ret!=XCRAFT_BLOCK_SIZE*bfree_blo){
         perror("write block_bitmap failed");
         free(block_bitmap);
         return -1;
     }
     free(block_bitmap);
-    if(bfree_blo>1){
-       char *block_bitmap = malloc(XCRAFT_BLOCK_SIZE);
-        if(!block_bitmap){
-            perror("malloc block_bitmap failed");
-            return -1;
-        }
-        uint64_t*bfree=(uint64_t *)block_bitmap;
-        memset(bfree, 0x00, XCRAFT_BLOCK_SIZE);
-        uint32_t shift_blo=sb->xcraft_sb.s_blocks_count%XCRAFT_BLOCKS_PER_GROUP;
-        uint32_t i=0;
-        while(shift_blo){
-            uint64_t line = 0x0;
-            //从低位开始置1
-            for (uint64_t mask = 0x1; mask; mask <<= 1) {
-                line |= mask;
-                shift_blo--;
-                if (!shift_blo)
-                    break;
-            }
-            bfree[i] = htole64(line);
-            i++;
-        }
-        int ret=write(fd, bfree, XCRAFT_BLOCK_SIZE);
-        if(ret!=XCRAFT_BLOCK_SIZE){
-            perror("write block_bitmap failed");
-            free(block_bitmap);
-            return -1;
-        }
-    }
     printf(
         " Initialize first bl_group block_bitmap success\n"
         "wrote %u block_bitmap blocks\n"
@@ -327,7 +298,8 @@ static int XCraft_write_inode_store(int fd, struct superblock_padding *sb){
     int ret=write(fd, inode_store, XCRAFT_BLOCK_SIZE);
     memset(inode_store, 0, XCRAFT_BLOCK_SIZE);
     uint32_t i=1;
-    for(i=1;i<XCRAFT_inodes_str_blocks_PER;i++){
+    uint32_t inode_str_blo=sb->xcraft_sb.s_groups_count==1?XCRAFT_inodes_str_blocks_last(&(sb->xcraft_sb)):XCRAFT_inodes_str_blocks_PER;
+    for(i=1;i<inode_str_blo;i++){
         ret=write(fd, inode_store, XCRAFT_BLOCK_SIZE);
         if(ret!=XCRAFT_BLOCK_SIZE){
             perror("write inode_store failed");
