@@ -262,7 +262,7 @@ static int XCraft_write_block_bitmap(int fd, struct superblock_padding *sb){
         }
         uint64_t*bfree=(uint64_t *)block_bitmap;
         memset(bfree, 0x00, XCRAFT_BLOCK_SIZE);
-        uint32_t shift_blo=sb->xcraft_sb.s_blocks_count%XCRAFT_BLOCK_PER_GROUP;
+        uint32_t shift_blo=sb->xcraft_sb.s_blocks_count%XCRAFT_BLOCKS_PER_GROUP;
         uint32_t i=0;
         while(shift_blo){
             uint64_t line = 0x0;
@@ -287,7 +287,7 @@ static int XCraft_write_block_bitmap(int fd, struct superblock_padding *sb){
         " Initialize first bl_group block_bitmap success\n"
         "wrote %u block_bitmap blocks\n"
         "\t block size=%ld B\n",
-        i,sizeof(uint64_t)*8);
+        bfree_blo,sizeof(uint64_t)*8);
 
     
     return 0;
@@ -386,7 +386,7 @@ int main(int argc, char **argv){
        fstats.st_size = block_size;
     }
     //检查Image文件大小是否合法 至少128M
-    long int min_size=*XCRAFT_BLOCKS_PER_GROUP*XCRAFT_BLOCK_SIZE;
+    long int min_size=XCRAFT_BLOCKS_PER_GROUP*XCRAFT_BLOCK_SIZE;
     if(fstats.st_size < min_size){
         fprintf(stderr, "Image file size is too small\n");
         ret=EXIT_FAILURE;
