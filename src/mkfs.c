@@ -226,7 +226,7 @@ static int XCraft_write_inode_store(int fd, struct superblock_padding *sb){
     struct XCraft_inode *root_inode = (struct XCraft_inode *)inode_store;
     uint32_t first_data_blo=1+XCRAFT_DESC_LIMIT_blo+1+1+XCRAFT_inodes_str_blocks_PER;
     root_inode+=1;
-    root_inode->i_mode=htole32(S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR |
+    root_inode->i_mode=htole16(S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR |
                             S_IWGRP | S_IXUSR | S_IXGRP | S_IXOTH);
     root_inode->i_uid=0;
     root_inode->i_size_lo=htole32(XCRAFT_BLOCK_SIZE);

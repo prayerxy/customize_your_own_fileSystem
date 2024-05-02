@@ -1,6 +1,5 @@
 ﻿// htree Ref:https://blogs.oracle.com/linux/post/understanding-ext4-disk-layout-part-2
 //  Ref：https://github.com/sysprog21/simplefs/tree/master
-//  Ref：https://github.com/sysprog21/simplefs/tree/master
 // block group + dir hash
 #ifndef XCRAFT_H
 #define XCRAFT_H
