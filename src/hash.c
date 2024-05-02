@@ -14,6 +14,10 @@ int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo){
 // inode->i_ino是ino号
 // inode对应的块存放目录项，如果d_entry存满一个块，开始make_hash_tree
 //  bh是撑爆的第一个块 进行分裂
+/*
+ * This converts a one block unindexed directory to a 3 block indexed
+ * directory, and adds the dentry to the indexed directory.
+ */
 static int XCraft_make_hash_tree(handle_t *handle, const struct qstr *qstr,
 			    struct inode *dir,
 			    struct inode *inode, struct buffer_head *bh)
@@ -22,6 +26,10 @@ static int XCraft_make_hash_tree(handle_t *handle, const struct qstr *qstr,
 	//先创立root与一个撑满的块
 	//再调用do_split,对撑满的块进行分裂
 	//最后将新的目录项插入到目录中 完成de->inode的赋值
+
+	struct dx_root	*root;
+	struct dx_frame frames[XCRAFT_HTREE_LEVEL],*frame;
+	struct dx_entry *entries;
     return 0;
 }
 

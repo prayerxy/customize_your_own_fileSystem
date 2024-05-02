@@ -118,6 +118,8 @@ struct XCraft_group_desc{
 
 //最开始建树的时候，10个以上分类成哈希树
 #define XCRAFT_dentry_LIMIT 10
+
+#define XCRAFT_HTREE_LEVEL 3
 struct XCraft_dir_entry{
      //对于 u8 类型的数据，字节序转换是不必要的。
     //其他数据要转换 le16_to_cpu

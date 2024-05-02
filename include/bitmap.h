@@ -105,7 +105,6 @@ out:
         group_desc_bh=bh;
         mark_buffer_dirty(bh2);
         mark_buffer_dirty(bh);
-        sync_dirty_buffer(bh);
         return desc+ret;
     }
     else return NULL;
@@ -138,7 +137,7 @@ static inline uint32_t get_free_inode(struct XCraft_superblock_info *sbi){
     }
     //找到了空闲的inode及块组描述符desc
     unsigned long*ifree_bitmap=kzalloc(XCRAFT_IFREE_PER_GROUP_BLO,GFP_KERNEL);
-    
+
   
     
 }

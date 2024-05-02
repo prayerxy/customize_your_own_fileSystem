@@ -64,7 +64,12 @@ static struct superblock_padding *write_superblock(int fd, struct stat *fstats){
    
 
     //注意根inode 索引占用一个数据块
-    uint32_t s_free_blocks_count = s_blocks_count-1-XCRAFT_DESC_LIMIT_blo-1-1-XCRAFT_inodes_str_blocks_PER-1;
+    uint32_t bfree_blo;
+    if(s_groups_count==1){
+        bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(s_last_group_blocks);
+    }
+    else bfree_blo=1;
+    uint32_t s_free_blocks_count = s_blocks_count-1-XCRAFT_DESC_LIMIT_blo-1-bfree_blo-XCRAFT_inodes_str_blocks_PER-1;
     uint32_t s_free_inodes_count = s_inodes_count-1;
     memset(sb, 0, sizeof(struct superblock_padding));
     sb->xcraft_sb=(struct XCraft_superblock){
@@ -130,9 +135,16 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
     //初始化第一个块组的组描述符
     group_desc[0].bg_inode_bitmap = htole32(1+XCRAFT_DESC_LIMIT_blo);
     group_desc[0].bg_block_bitmap = htole32(2+XCRAFT_DESC_LIMIT_blo);
-    group_desc[0].bg_inode_table = htole32(3+XCRAFT_DESC_LIMIT_blo);//inode_bitmap与block_bitmap只占一个块
     uint16_t t1=le32toh(sb->xcraft_sb.s_inodes_per_group);
     uint16_t t2=le32toh(sb->xcraft_sb.s_blocks_per_group);
+    uint32_t bfree_blo;
+    if(sb->xcraft_sb.s_groups_count==1){
+        bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32toh(sb->xcraft_sb.s_last_group_blocks));
+        t2=sb->xcraft_sb.s_blocks_count;
+        t1=sb->xcraft_sb.s_inodes_count;
+    }
+    else bfree_blo=1;
+    group_desc[0].bg_inode_table = htole32(2+bfree_blo+XCRAFT_DESC_LIMIT_blo);//inode_bitmap与block_bitmap只占一个块
     group_desc[0].bg_nr_inodes = htole16(t1);
     group_desc[0].bg_nr_blocks = htole16(t2);
     //root inode索引一个数据块
@@ -144,8 +156,11 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
         " Initialize first bl_group group_desc success\n"
         " wrote %u group_desc blocks\n"
         "\t group_desc size=%ld B\n"
+        "\t group[0] bg_nr_inodes=%u\n"
+        "\t group[0] bg_nr_blocks=%u\n"
+        "\t group[0] inode_table=%u\n"
         "\t group[0] inode count=%u\n",
-        group_desc_blocks,sizeof(struct XCraft_group_desc),group_desc[0].bg_nr_inodes);
+        group_desc_blocks,sizeof(struct XCraft_group_desc),group_desc[0].bg_nr_inodes,group_desc[0].bg_nr_blocks,group_desc[0].bg_inode_table,group_desc[0].bg_nr_inodes);
     for(uint32_t i=1; i<sb->xcraft_sb.s_groups_count; i++){
         group_desc[i].bg_inode_bitmap = 0;
         group_desc[i].bg_block_bitmap = 0;
@@ -205,15 +220,19 @@ static int XCraft_write_inode_bitmap(int fd, struct superblock_padding *sb){
 //mkfs write block_bitmap to block
 // 初始化block_bitmap 写到磁盘上 只写第一个块组的block_bitmap
 static int XCraft_write_block_bitmap(int fd, struct superblock_padding *sb){
+    uint32_t bfree_blo;
+    if(sb->xcraft_sb.s_groups_count==1){
+        bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32toh(sb->xcraft_sb.s_last_group_blocks));
+    }
+    else bfree_blo=1;
     char *block_bitmap = malloc(XCRAFT_BLOCK_SIZE);
     if(!block_bitmap){
         perror("malloc block_bitmap failed");
         return -1;
     }
     //超级块+组描述符+inode_bitmap+block_bitmap+inode_store+根目录inode索引的数据块
-    uint32_t nr_used=1+XCRAFT_DESC_LIMIT_blo+1+1+XCRAFT_inodes_str_blocks_PER+1;
+    uint32_t nr_used=1+XCRAFT_DESC_LIMIT_blo+1+bfree_blo+XCRAFT_inodes_str_blocks_PER+1;
     uint64_t*bfree=(uint64_t *)block_bitmap;
-
     memset(bfree, 0xff, XCRAFT_BLOCK_SIZE);
     uint32_t i=0;
     while(nr_used){
@@ -234,8 +253,43 @@ static int XCraft_write_block_bitmap(int fd, struct superblock_padding *sb){
         free(block_bitmap);
         return -1;
     }
-
     free(block_bitmap);
+    if(bfree_blo>1){
+       char *block_bitmap = malloc(XCRAFT_BLOCK_SIZE);
+        if(!block_bitmap){
+            perror("malloc block_bitmap failed");
+            return -1;
+        }
+        uint64_t*bfree=(uint64_t *)block_bitmap;
+        memset(bfree, 0x00, XCRAFT_BLOCK_SIZE);
+        uint32_t shift_blo=sb->xcraft_sb.s_blocks_count%XCRAFT_BLOCK_PER_GROUP;
+        uint32_t i=0;
+        while(shift_blo){
+            uint64_t line = 0x0;
+            //从低位开始置1
+            for (uint64_t mask = 0x1; mask; mask <<= 1) {
+                line |= mask;
+                shift_blo--;
+                if (!shift_blo)
+                    break;
+            }
+            bfree[i] = htole64(line);
+            i++;
+        }
+        int ret=write(fd, bfree, XCRAFT_BLOCK_SIZE);
+        if(ret!=XCRAFT_BLOCK_SIZE){
+            perror("write block_bitmap failed");
+            free(block_bitmap);
+            return -1;
+        }
+    }
+    printf(
+        " Initialize first bl_group block_bitmap success\n"
+        "wrote %u block_bitmap blocks\n"
+        "\t block size=%ld B\n",
+        i,sizeof(uint64_t)*8);
+
+    
     return 0;
 
 }
@@ -251,7 +305,12 @@ static int XCraft_write_inode_store(int fd, struct superblock_padding *sb){
     memset(inode_store, 0, XCRAFT_BLOCK_SIZE);
     //初始化root inode
     struct XCraft_inode *root_inode = (struct XCraft_inode *)inode_store;
-    uint32_t first_data_blo=1+XCRAFT_DESC_LIMIT_blo+1+1+XCRAFT_inodes_str_blocks_PER;
+     uint32_t bfree_blo;
+    if(sb->xcraft_sb.s_groups_count==1){
+        bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32toh(sb->xcraft_sb.s_last_group_blocks));
+    }
+    else bfree_blo=1;
+    uint32_t first_data_blo=1+XCRAFT_DESC_LIMIT_blo+1+bfree_blo+XCRAFT_inodes_str_blocks_PER;
     root_inode+=1;
     root_inode->i_mode=htole16(S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR |
                             S_IWGRP | S_IXUSR | S_IXGRP | S_IXOTH);
@@ -327,7 +386,7 @@ int main(int argc, char **argv){
        fstats.st_size = block_size;
     }
     //检查Image文件大小是否合法 至少128M
-    long int min_size=XCRAFT_BLOCKS_PER_GROUP*XCRAFT_BLOCK_SIZE;
+    long int min_size=*XCRAFT_BLOCKS_PER_GROUP*XCRAFT_BLOCK_SIZE;
     if(fstats.st_size < min_size){
         fprintf(stderr, "Image file size is too small\n");
         ret=EXIT_FAILURE;

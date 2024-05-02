@@ -244,11 +244,17 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     
     sb_info->s_ibmap_info = kzalloc(sizeof(struct XCraft_ibmap_info *) * sb_info->s_groups_count, GFP_KERNEL);
     sb_info->s_ibmap_info[0]=kzalloc(sizeof(struct XCraft_ibmap_info),GFP_KERNEL);
-    sb_info->s_ibmap_info[0]->ifree_bitmap=kzalloc(1,GFP_KERNEL);
-    if(sb_info->s_groups_count>1)
-        sb_info->s_ibmap_info[0]->bfree_bitmap=kzalloc(1,GFP_KERNEL);
-    else
-        sb_info->s_ibmap_info[0]->bfree_bitmap=kzalloc(XCRAFT_BFREE_PER_GROUP_BLO(sb_info->s_last_group_blocks),GFP_KERNEL);
+    sb_info->s_ibmap_info[0]->ifree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE,GFP_KERNEL);
+
+
+    uint32_t bfree_blo;
+    if(sb->xcraft_sb.s_groups_count==1){
+        bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32toh(sb->xcraft_sb.s_last_group_blocks));
+    }
+    else bfree_blo=1;
+  
+    sb_info->s_ibmap_info[0]->bfree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE*bfree_blo,GFP_KERNEL);
+
     if(!sb_info->s_ibmap_info[0]->ifree_bitmap||!sb_info->s_ibmap_info[0]->bfree_bitmap){
         ret = -ENOMEM;
         goto out_free_group_desc;
@@ -256,6 +262,7 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     for(int i=0;i<XCRAFT_DESC_LIMIT_blo;i++){
         bh1 = sb_bread(sb, i+1);
         group_desc[i] = bh1;
+        
         if(!bh1){
             ret = -EIO;
             goto out_free_group_desc;
@@ -264,7 +271,51 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     sb_info->s_gdb_count = gdb_count;//组描述符占多少个块
     sb_info->s_group_desc = group_desc;
 
-    bh=sb_bread(sb,1+XCRAFT_DESC_LIMIT_blo);
+    
+    // 读第0个块组的位图
+    bh=sb_bread(sb,1 + XCRAFT_DESC_LIMIT_blo);
+    if(!bh){
+        ret = -EIO;
+        goto out_free_group_desc;
+    }
+    memcpy((void *)sb_info->s_ibmap_info[0]->ifree_bitmap, bh->b_data,
+            XCRAFT_BLOCK_SIZE);
+
+    bh=sb_bread(sb,2 + XCRAFT_DESC_LIMIT_blo);
+    if(!bh){
+        ret = -EIO;
+        goto out_free_group_desc;
+    }
+
+    memcpy((void *)sb_info->s_ibmap_info[0]->bfree_bitmap, bh->b_data,XCRAFT_BLOCK_SIZE);
+    if(bfree_blo>1){
+        bh=sb_bread(sb,3 + XCRAFT_DESC_LIMIT_blo);
+        if(!bh){
+            ret = -EIO;
+            goto out_free_group_desc;
+        }
+        memcpy((void *)sb_info->s_ibmap_info[0]->bfree_bitmap+XCRAFT_BLOCK_SIZE, bh->b_data,XCRAFT_BLOCK_SIZE);
+    }
+    
+    
+    // 对其他块组的位图进行初始化 申请空间
+    for(int i=1;i<sb_info->s_groups_count;i++){
+        sb_info->s_ibmap_info[i]=kzalloc(sizeof(struct XCraft_ibmap_info),GFP_KERNEL);
+        sb_info->s_ibmap_info[i]->ifree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE,GFP_KERNEL);
+        if(i!=sb_info->s_groups_count-1){
+            sb_info->s_ibmap_info[i]->bfree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE,GFP_KERNEL);
+            memset(sb_info->s_ibmap_info[i]->bfree_bitmap,0,XCRAFT_BLOCK_SIZE);
+        }
+        else{
+            sb_info->s_ibmap_info[i]->bfree_bitmap=kzalloc(XCRAFT_BFREE_PER_GROUP_BLO(sb_info->s_last_group_blocks)*XCRAFT_BLOCK_SIZE,GFP_KERNEL);
+            memset(sb_info->s_ibmap_info[i]->bfree_bitmap,0,XCRAFT_BFREE_PER_GROUP_BLO(sb_info->s_last_group_blocks)*XCRAFT_BLOCK_SIZE);
+        }
+        memset(sb_info->s_ibmap_info[i]->ifree_bitmap,0,XCRAFT_BLOCK_SIZE);
+        if(!sb_info->s_ibmap_info[i]->ifree_bitmap||!sb_info->s_ibmap_info[i]->bfree_bitmap){
+            ret = -ENOMEM;
+            goto out_free_group_desc;
+        }
+    }
 
     // init root inode
     root_inode = XCraft_iget(sb, 0);
@@ -272,6 +323,8 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
         ret = PTR_ERR(root_inode);
         goto out_free_group_desc;
     }
+
+
 #if MNT_IDMAP_REQUIRED()
     inode_init_owner(&nop_mnt_idmap, root_inode, NULL, root_inode->i_mode);
 #elif USER_NS_REQUIRED()
