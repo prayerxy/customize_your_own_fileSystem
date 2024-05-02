@@ -83,7 +83,7 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
         return -EIO;
     disk_inode = (struct XCraft_inode *)bh->b_data;
     disk_inode += inode_shift_in_block;
-    // 字节序转换存�?
+    // 字节序转换存�?
     disk_inode->i_mode = cpu_to_le16(inode->i_mode);
     disk_inode->i_uid = cpu_to_le16(i_uid_read(inode));
     disk_inode->i_gid = cpu_to_le16(i_gid_read(inode));
@@ -150,7 +150,7 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
     if (wait)
         sync_dirty_buffer(sb_info->s_sbh);
 
-    // 回写块组描述�?
+    // 回写块组描述符
     struct buffer_head *bh1 = NULL,*bh2 = NULL;
     for(int i=0;i<sb_info->s_gdb_count;i++){
         bh1 = sb_bread(sb, i+1);
@@ -249,7 +249,7 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
             goto out_free_group_desc;
         }
     }
-    sb_info->s_gdb_count = gdb_count;//组描述符占多少个�?
+    sb_info->s_gdb_count = gdb_count;//组描述符占多少个�?
     sb_info->s_group_desc = group_desc;
 
     // init root inode
