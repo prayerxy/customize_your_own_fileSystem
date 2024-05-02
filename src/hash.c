@@ -1,7 +1,7 @@
 #include "../include/hash.h"
 
 // hash value to caculate 
-// name:文件名 len:文件名长度  hinfo:hash值
+// name:文件名 len:文件名长度  hinfo:hash值(储存hash值的结构体)
 int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo){
 
     return 0;

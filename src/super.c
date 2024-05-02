@@ -231,6 +231,7 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     sb_info->s_groups_count = le32toh(disk_sb->s_groups_count);
     sb_info->s_sbh = bh;
     sb_info->s_super = disk_sb;
+    sb_info->s_La_init_group=0;//初始化第一个块组
     sb->s_fs_info = sb_info;
     sb_info->s_last_group_inodes = le32toh(disk_sb->s_inodes_count)-sb_info->s_inodes_per_group*(sb_info->s_groups_count-1);
     sb_info->s_last_group_blocks = le32toh(disk_sb->s_last_group_blocks);
@@ -241,6 +242,17 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     gdb_count= ceil_div(sb_info->s_groups_count, sb_info->s_desc_per_block);
     struct buffer_head** group_desc = kzalloc(sizeof(struct buffer_head*) * XCRAFT_DESC_LIMIT_blo, GFP_KERNEL);
     
+    sb_info->s_ibmap_info = kzalloc(sizeof(struct XCraft_ibmap_info *) * sb_info->s_groups_count, GFP_KERNEL);
+    sb_info->s_ibmap_info[0]=kzalloc(sizeof(struct XCraft_ibmap_info),GFP_KERNEL);
+    sb_info->s_ibmap_info[0]->ifree_bitmap=kzalloc(1,GFP_KERNEL);
+    if(sb_info->s_groups_count>1)
+        sb_info->s_ibmap_info[0]->bfree_bitmap=kzalloc(1,GFP_KERNEL);
+    else
+        sb_info->s_ibmap_info[0]->bfree_bitmap=kzalloc(XCRAFT_BFREE_PER_GROUP_BLO(sb_info->s_last_group_blocks),GFP_KERNEL);
+    if(!sb_info->s_ibmap_info[0]->ifree_bitmap||!sb_info->s_ibmap_info[0]->bfree_bitmap){
+        ret = -ENOMEM;
+        goto out_free_group_desc;
+    }
     for(int i=0;i<XCRAFT_DESC_LIMIT_blo;i++){
         bh1 = sb_bread(sb, i+1);
         group_desc[i] = bh1;
@@ -251,6 +263,8 @@ XCraft_fill_super(struct super_block *sb, void *data, int silent){
     }
     sb_info->s_gdb_count = gdb_count;//组描述符占多少个块
     sb_info->s_group_desc = group_desc;
+
+    bh=sb_bread(sb,1+XCRAFT_DESC_LIMIT_blo);
 
     // init root inode
     root_inode = XCraft_iget(sb, 0);

@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <stdint.h>
+#include <endian.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -130,9 +131,10 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
     group_desc[0].bg_inode_bitmap = htole32(1+XCRAFT_DESC_LIMIT_blo);
     group_desc[0].bg_block_bitmap = htole32(2+XCRAFT_DESC_LIMIT_blo);
     group_desc[0].bg_inode_table = htole32(3+XCRAFT_DESC_LIMIT_blo);//inode_bitmap与block_bitmap只占一个块
-    
-    group_desc[0].bg_nr_blocks = sb->xcraft_sb.s_blocks_per_group;
-    group_desc[0].bg_nr_inodes = sb->xcraft_sb.s_inodes_per_group;
+    uint16_t t1=le32toh(sb->xcraft_sb.s_inodes_per_group);
+    uint16_t t2=le32toh(sb->xcraft_sb.s_blocks_per_group);
+    group_desc[0].bg_nr_inodes = htole16(t1);
+    group_desc[0].bg_nr_blocks = htole16(t2);
     //root inode索引一个数据块
     group_desc[0].bg_free_blocks_count = sb->xcraft_sb.s_free_blocks_count;
     group_desc[0].bg_free_inodes_count = htole16(XCRAFT_INODES_PER_GROUP -1);

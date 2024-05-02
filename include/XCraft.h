@@ -22,7 +22,7 @@
 #define XCraft_BG_INODE_INIT	0x0001 /* Inode table/bitmap not in use */
 #define XCraft_BG_BLOCK_INIT	0x0002 /* Block bitmap not in use */
 #define Xcraft_BG_INODE_ZEROED	0x0004 /* On-disk itable initialized to zero */
-#define XCraft_BG_ISINIT(flag) (flag&XCraft_BG_INODE_INIT)||(flag&XCraft_BG_BLOCK_INIT)
+#define XCraft_BG_ISINIT(flag) (flag&XCraft_BG_INODE_INIT)&&(flag&XCraft_BG_BLOCK_INIT)
 // inode flags
 #define XCraft_INODE_HASH_TREE 0x0001
 #define XCraft_INODE_HASH_TREE_IS(flag) flag & XCraft_INODE_HASH_TREE
@@ -110,6 +110,7 @@ struct XCraft_group_desc{
     __le16 bg_free_inodes_count; /* number of free inodes */
     __le16 bg_used_dirs_count; /* number of directories */
     __le16 bg_flags;/*EXT4_BG_flags(INODE_UNINIT,etc) 表示该块组的信息 初始化or未初始化*/
+
 };
 #define XCRAFT_GROUP_DESC_SIZE sizeof(struct XCraft_group_desc)
 #define XCRAFT_GROUP_DESCS_PER_BLOCK (XCRAFT_BLOCK_SIZE / XCRAFT_GROUP_DESC_SIZE)
@@ -163,7 +164,10 @@ struct XCraft_inode_info{
     unsigned int i_block[XCRAFT_N_BLOCK];//指向数据块的指针
     struct inode vfs_inode;
 };
-
+struct XCraft_ibmap_info{
+    unsigned long*ifree_bitmap;//inode bitmap
+    unsigned long*bfree_bitmap;//block bitmap
+};
 struct XCraft_superblock_info{
     unsigned long s_blocks_per_group; /* number of blocks per group */
     unsigned long s_inodes_per_group; /* number of inodes per group */
@@ -171,10 +175,13 @@ struct XCraft_superblock_info{
     unsigned long s_last_group_blocks;//最后一个组的块数
     unsigned long s_gdb_count; /* number of group descriptor blocks */
     unsigned long s_desc_per_block; /* number of group descriptors per block */
+    __u32 s_La_init_group;//最后一个初始化的块组
     xcraft_group_t s_groups_count; /* number of groups */
     struct buffer_head *s_sbh; /* superblock buffer_head */
     struct XCraft_superblock* s_super; /* superblock */
     struct buffer_head**s_group_desc;//指向组描述符数组的块的指针
+    struct XCraft_ibmap_info **s_ibmap_info;//指向bitmap的指针
+    
 };
 
 struct XCraft_hash_info
@@ -187,7 +194,7 @@ struct XCraft_hash_info
 struct XCraft_frame
 {
     struct buffer_head *bh;//dx_entry所在磁盘块
-    struct dx_entry *entries;//同一级的dx_entry
+    struct dx_entry *entri0es;//同一级的dx_entry
     struct dx_entry *at;//最终的dx_entry
 };
 
