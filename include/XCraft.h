@@ -38,7 +38,7 @@ XCraft partition layout
  * +---------------+
  * |  descriptor   |  sb->s_gdb_count blocks
  * +---------------+
- * | ifree bitmap  |  group_0
+ * | ifree bitmap  |  bg_0(32768 blocks) 4096*8
  * +---------------+
  * | bfree bitmap  |  XCRAFT_BFREE_PER_GROUP_BLO blocks
  * +---------------+

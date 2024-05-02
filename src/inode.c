@@ -37,7 +37,7 @@ static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 
 	int ret;
 	// 如果ino超过了范围
-	if (ino >= le32_to_cpu(disk_sb->s_inodes_count))
+	if (ino >= le32toh(disk_sb->s_inodes_count))
 		return ERR_PTR(-EINVAL);
 
 	// 获取块组描述符
