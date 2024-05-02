@@ -48,6 +48,9 @@ static struct superblock_padding *write_superblock(int fd, struct stat *fstats){
         }
        
     }
+    else   
+        s_last_group_blocks=s_blocks_per_group;//整除
+    
     uint32_t last_inode_count=s_last_group_blocks/XCRAFT_INODE_RATIO;
     s_inodes_count = (s_groups_count-1)*s_inodes_per_group + last_inode_count;
     uint32_t mod=last_inode_count%XCRAFT_INODES_PER_BLOCK;
@@ -92,11 +95,12 @@ static struct superblock_padding *write_superblock(int fd, struct stat *fstats){
         "\ts_blocks_per_group: %u\n"
         "\ts_inodes_per_group: %u\n"
         "\ts_groups_count: %u\n"
+        "\ts_last_group_blocks: %u\n"
         "\ts_magic=%#x(RE)\n"
         "\ts_inode_size: %u\n",
         sb->xcraft_sb.s_inodes_count,sb->xcraft_sb.s_blocks_count,sb->xcraft_sb.s_free_blocks_count,
         sb->xcraft_sb.s_free_inodes_count,sb->xcraft_sb.s_blocks_per_group,sb->xcraft_sb.s_inodes_per_group,
-        sb->xcraft_sb.s_groups_count,sb->xcraft_sb.s_magic,sb->xcraft_sb.s_inode_size
+        sb->xcraft_sb.s_groups_count,sb->xcraft_sb.s_last_group_blocks,sb->xcraft_sb.s_magic,sb->xcraft_sb.s_inode_size
     );
     return sb;
     
@@ -296,18 +300,20 @@ int main(int argc, char **argv){
     }
     //获取文件信息
     struct stat fstats;
-    if(fstat(fd, &fstats)){
+    int ret=fstat(fd, &fstats);
+    if(ret){
         perror("fstat image file failed");
-        close(fd);
-        return EXIT_FAILURE;
+        ret=EXIT_FAILURE;
+        goto fclose;
     }
     //得到设备块大小
-    if(fstats.st_mode&S_IFMT==S_IFBLK){
+    if((fstats.st_mode & S_IFMT) == S_IFBLK){
         unsigned long block_size;
-        if(ioctl(fd, BLKSSZGET, &block_size)){
+        ret=ioctl(fd, BLKSSZGET, &block_size);
+        if(ret!=0){
             perror("ioctl BLKSSZGET failed");
-            close(fd);
-            return EXIT_FAILURE;
+            ret=EXIT_FAILURE;
+            goto fclose;
         }
        fstats.st_size = block_size;
     }
@@ -315,20 +321,50 @@ int main(int argc, char **argv){
     long int min_size=XCRAFT_BLOCKS_PER_GROUP*XCRAFT_BLOCK_SIZE;
     if(fstats.st_size < min_size){
         fprintf(stderr, "Image file size is too small\n");
-        close(fd);
-        return EXIT_FAILURE;
+        ret=EXIT_FAILURE;
+        goto fclose;
     }
     //写超级块
     struct superblock_padding *sb=write_superblock(fd, &fstats);
     if(!sb){
         perror("write_superblock() failed");
-        close(fd);
-        return EXIT_FAILURE;
+        ret= EXIT_FAILURE;
+        goto fclose;
     }
     //写group_desc
-    if(XCraft_write_group_desc(fd, sb)){
+    ret=XCraft_write_group_desc(fd, sb);
+    if(ret){
         perror("write_group_desc() failed");
-        free(sb);
-        close(fd);
-        return EXIT_FAILURE;
-  
+        ret= EXIT_FAILURE;
+        goto free_sb;
+    }
+    //写一个块组的inode_bitmap
+    if(XCraft_write_inode_bitmap(fd, sb)){
+        perror("write_inode_bitmap() failed");
+        ret= EXIT_FAILURE;
+        goto free_sb;
+    }
+    //写第一个块组的block_bitmap
+    if(XCraft_write_block_bitmap(fd, sb)){
+        perror("write_block_bitmap() failed");
+        ret=EXIT_FAILURE;
+        goto free_sb;
+    }
+    //写第一个块组的inode_store
+    if(XCraft_write_inode_store(fd, sb)){
+        perror("write_inode_store() failed");
+        ret= EXIT_FAILURE;
+        goto free_sb;
+    }
+    if(XCraft_delayed_initialize(fd, sb)){
+        perror("delayed_initialize() failed");
+        ret= EXIT_FAILURE;
+        goto free_sb;
+    }
+free_sb:
+    free(sb);
+fclose:
+    close(fd);
+
+    return 0;
+}

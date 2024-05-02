@@ -83,7 +83,7 @@ struct XCraft_inode{
     最后一个块组的inode_store不一定是XCRAFT_inodes_str_blocks_PER，
     而是(s_inodes_count-(s_groups_count-1)*s_inodes_per_group)/XCRAFT_INODES_PER_BLOCK
 */
-#define XCRAFT_inodes_str_blocks_PER XCRAFT_INODES_PER_GROUP/XCRAFT_INODE_SIZE
+#define XCRAFT_inodes_str_blocks_PER XCRAFT_INODES_PER_GROUP/XCRAFT_INODES_PER_BLOCK
 struct XCraft_superblock{
     __le32 s_inodes_count; /* number of inodes */
     __le32 s_blocks_count; /* number of blocks */
