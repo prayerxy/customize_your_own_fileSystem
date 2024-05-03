@@ -154,7 +154,24 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
     struct buffer_head *bh1;
     struct XCraft_group_desc *disk_gdb ;
     for(int i=0;i<sb_info->s_gdb_count;i++){
-        bh1 = sb_bread(sb, i+1);
+        // bh1 = sb_bread(sb, i+1);
+        // if(!bh1)
+        //     return -EIO;
+        // struct XCraft_group_desc *disk_gdb = (struct XCraft_group_desc *)bh1->b_data;
+        // memcpy((char *)disk_gdb, (char *)(sb_info->s_group_desc[i]->b_data), XCRAFT_BLOCK_SIZE);
+        mark_buffer_dirty(sb_info->s_group_desc[i]);
+        if (wait)
+            sync_dirty_buffer(sb_info->s_group_desc[i]);
+    }
+
+
+    // 回写inode位图和bitmap位图
+    for(int i=0;i<sb_info->s_groups_count;i++){
+        struct XCraft_group_desc *disk_gdb = XCraft_get_group_desc(sb_info,i);
+        uint32_t bg_inode_bitmap= le32_to_cpu(disk_gdb->bg_inode_bitmap);
+        uint32_t bg_block_bitmap = le32_to_cpu(disk_gdb->bg_block_bitmap);
+        // inode位图只有一块
+        bh1 = sb_bread(sb, bg_inode_bitmap);
         if(!bh1)
             return -EIO;
         disk_gdb = (struct XCraft_group_desc *)bh1->b_data;
@@ -163,6 +180,30 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
         if (wait)
             sync_dirty_buffer(bh1);
         brelse(bh1);
+        // block位图可能有多块
+        // 先只写一个块
+        bh2 = sb_bread(sb, bg_block_bitmap);
+        if(!bh2)
+            return -EIO;
+        
+        mark_buffer_dirty(bh2);
+        if (wait)
+            sync_dirty_buffer(bh2);
+        brelse(bh2);
+        memcpy((char *)bh2->b_data, (char *)(sb_info->s_ibmap_info[i]->bfree_bitmap), XCRAFT_BLOCK_SIZE);
+        
+        uint32_t bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32_to_cpu(desc->bg_nr_blocks));
+        if(bfree_blo>1){
+            struct buffer_head *bh3 = sb_bread(sb, bg_block_bitmap+1);
+            if(!bh3)
+                return -EIO;
+            memcpy((char *)bh3->b_data, (char *)(sb_info->s_ibmap_info[i]->bfree_bitmap) + XCRAFT_BLOCK_SIZE, XCRAFT_BLOCK_SIZE);
+            mark_buffer_dirty(bh3);
+            if (wait)
+                sync_dirty_buffer(bh3);
+            brelse(bh3);
+        }
+
     }
     return 0;
 }
