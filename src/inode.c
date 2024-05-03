@@ -37,7 +37,7 @@ static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 
 	int ret;
 	// 如果ino超过了范围
-	if (ino >= le32toh(disk_sb->s_inodes_count))
+	if (ino >= le32_to_cpu(disk_sb->s_inodes_count))
 		return ERR_PTR(-EINVAL);
 
 	// 获取块组描述符
@@ -64,7 +64,7 @@ static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	xi = XCRAFT_I(inode);
 
 	// 开始确定此块组中inode所在起始的物理块号
-	uint32_t inode_table = le32toh(desc->bg_inode_table);
+	uint32_t inode_table = le32_to_cpu(desc->bg_inode_table);
 	// inode所在的物理块号和在此块中的偏移量
 	uint32_t inode_block = inode_table + (inode_index_in_group / XCRAFT_INODES_PER_BLOCK);
 	uint32_t inode_offset = inode_index_in_group % XCRAFT_INODES_PER_BLOCK;
@@ -81,39 +81,39 @@ static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	inode->i_ino = ino;
 	inode->i_sb = sb;
 	inode->i_op = &XCraft_inode_operations;
-	inode->i_mode = le16toh(disk_inode->i_mode);
+	inode->i_mode = le16_to_cpu(disk_inode->i_mode);
 
-	i_uid_write(inode, le16toh(disk_inode->i_uid));
-    i_gid_write(inode, le16toh(disk_inode->i_gid));
-    inode->i_size = le32toh(disk_inode->i_size_lo);
+	i_uid_write(inode, le16_to_cpu(disk_inode->i_uid));
+    i_gid_write(inode, le16_to_cpu(disk_inode->i_gid));
+    inode->i_size = le32_to_cpu(disk_inode->i_size_lo);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-    inode_set_ctime(inode, (time64_t) le32toh(disk_inode->i_ctime), 0);
+    inode_set_ctime(inode, (time64_t) le32_to_cpu(disk_inode->i_ctime), 0);
 #else
-    inode->i_ctime.tv_sec = (time64_t) le32toh(disk_inode->i_ctime);
+    inode->i_ctime.tv_sec = (time64_t) le32_to_cpu(disk_inode->i_ctime);
     inode->i_ctime.tv_nsec = 0;
 #endif
 
-    inode->i_atime.tv_sec = (time64_t) le32toh(disk_inode->i_atime);
+    inode->i_atime.tv_sec = (time64_t) le32_to_cpu(disk_inode->i_atime);
     inode->i_atime.tv_nsec = 0;
-    inode->i_mtime.tv_sec = (time64_t) le32toh(disk_inode->i_mtime);
+    inode->i_mtime.tv_sec = (time64_t) le32_to_cpu(disk_inode->i_mtime);
     inode->i_mtime.tv_nsec = 0;
-    inode->i_blocks = le32toh(disk_inode->i_blocks_lo);
-    set_nlink(inode, le32toh(disk_inode->i_links_count));
+    inode->i_blocks = le32_to_cpu(disk_inode->i_blocks_lo);
+    set_nlink(inode, le32_to_cpu(disk_inode->i_links_count));
 
 
 	// XCraft_inode_info 字段赋值
-	xi->i_dtime = le32toh(disk_inode->i_dtime);
+	xi->i_dtime = le32_to_cpu(disk_inode->i_dtime);
 	xi->i_block_group = block_group;
-	xi->i_flags = le32toh(disk_inode->i_flags);
+	xi->i_flags = le32_to_cpu(disk_inode->i_flags);
 	
 	if(S_ISDIR(inode->i_mode)){
 		for(int i=0;i<XCRAFT_N_BLOCK;i++)
-			xi->i_block[i] = le32toh(disk_inode->i_block[i]);
+			xi->i_block[i] = le32_to_cpu(disk_inode->i_block[i]);
 		inode->i_fop = &XCraft_dir_operations;
 	}else if(S_ISREG(inode->i_mode)){
 		for(int i=0;i<XCRAFT_N_BLOCK;i++)
-			xi->i_block[i] = le32toh(disk_inode->i_block[i]);
+			xi->i_block[i] = le32_to_cpu(disk_inode->i_block[i]);
 		inode->i_fop = &XCraft_file_operations;
 		inode->i_mapping->a_ops = &XCraft_aops
 	}else if(S_ISLNK(inode->i_mode)){
@@ -162,7 +162,7 @@ struct inode *XCraft_new_inode(handle_t *handle, struct inode *dir,
     }
 
 	// 检查inode是否还有空余的
-	if(le32toh(disk_sb->s_free_inodes_count) == 0 || le32toh(disk_sb->s_free_blocks_count) == 0)
+	if(le32_to_cpu(disk_sb->s_free_inodes_count) == 0 || le32_to_cpu(disk_sb->s_free_blocks_count) == 0)
 		return ERR_PTR(-ENOSPC);
 
 	// 分配inode
@@ -384,7 +384,7 @@ static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, un
 	bh = XCraft_find_entry(dir, &dentry->d_name, &de);
 
 	// 由inode号获取inode
-	uint32_t ino = le32toh(de->inode);
+	uint32_t ino = le32_to_cpu(de->inode);
 	// static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	inode = XCraft_iget(sb, ino);
 	if(IS_ERR(inode)){

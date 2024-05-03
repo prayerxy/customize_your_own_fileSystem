@@ -16,6 +16,7 @@ struct superblock_padding{
     char padding[4060];//4096-36
 };
 
+#define XCRAFT_inodes_str_blocks_last(sb) (le32toh((sb)->s_inodes_count) - (le32toh((sb)->s_groups_count) - 1) * le32toh((sb)->s_inodes_per_group)) / XCRAFT_INODES_PER_BLOCK
 
 
 //mkfs write super_block

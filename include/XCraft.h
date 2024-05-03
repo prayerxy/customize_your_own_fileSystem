@@ -5,8 +5,7 @@
 #define XCRAFT_H
 #include <linux/types.h>
 #include <linux/version.h>
-#include <endian.h>
-#include <stdint.h>
+
 #define XCRAFT_MAGIC 0x1234 /* "XCRA" */
 #define XCRAFT_BLOCK_SIZE (1 << 12) /* 4 KiB */
 #define XCRAFT_N_BLOCK 15   //2个直接索引块 2个1级间接索引块 1个2级间接索引块
@@ -98,7 +97,7 @@ struct XCraft_superblock{
 };
 
 //注意这里一定是整除 因为在write_super加上Mod
-#define XCRAFT_inodes_str_blocks_last(sb) (le32toh((sb)->s_inodes_count) - (le32toh((sb)->s_groups_count) - 1) * le32toh((sb)->s_inodes_per_group)) / XCRAFT_INODES_PER_BLOCK
+//mkfs用户态用到
 
 struct XCraft_group_desc{
     __le32 bg_block_bitmap; /* block bitmap block 物理块号*/

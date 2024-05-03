@@ -8,7 +8,7 @@
 static int inode_get_block_group(struct XCraft_superblock_info *sb_info, uint32_t ino)
 {
     struct XCraft_superblock *disk_sb = sb_info->s_super;
-    uint32_t tmp=le32toh(disk_sb->s_inodes_count)-sb_info->s_last_group_inodes;
+    uint32_t tmp=le32_to_cpu(disk_sb->s_inodes_count)-sb_info->s_last_group_inodes;
     if(ino>=tmp)
         return sb_info->s_groups_count-1;
     else
@@ -19,7 +19,7 @@ static int inode_get_block_group(struct XCraft_superblock_info *sb_info, uint32_
 static int inode_get_block_group_shift(struct XCraft_superblock_info *sb_info, uint32_t ino)
 {
     struct XCraft_superblock *disk_sb = sb_info->s_super;
-    uint32_t tmp=le32toh(disk_sb->s_inodes_count)-sb_info->s_last_group_inodes;
+    uint32_t tmp=le32_to_cpu(disk_sb->s_inodes_count)-sb_info->s_last_group_inodes;
     if(ino>=tmp)
         return ino-tmp;
     else
