@@ -25,7 +25,6 @@
 // inode flags
 #define XCraft_INODE_HASH_TREE 0x0001
 #define XCraft_INODE_ISHASH_TREE(flag) flag & XCraft_INODE_HASH_TREE
-#define XCraft_INODE_ISHASH_TREE(flag) flag & XCraft_INODE_HASH_TREE
 
 //ifree_per_group_blo 
 #define XCRAFT_IFREE_PER_GROUP_BLO 1
@@ -167,7 +166,6 @@ struct dx_node
     __le16 limit; /* limit */
     __le16 count; /* count */
     struct dx_entry entries[]; /* entries */
-    struct dx_entry entries[]; /* entries */
 };
 
 
@@ -209,7 +207,6 @@ struct XCraft_hash_info
     __u32 *seed; //Hash种子数组
 };
 
-struct dx_frame
 struct dx_frame
 {
     struct buffer_head *bh;//dx_entry所在磁盘块

@@ -426,7 +426,7 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode){
 		return -EINVAL;
 	
 	// 判断时现在是否为哈希树
-	if(XCraft_INODE_HASH_TREE_IS(xi->i_flags)){
+	if(XCraft_INODE_ISHASH_TREE(xi->i_flags)){
 		retval = XCraft_dx_add_entry(dentry, inode);
 		// retval为0表示添加目录项成功
 		if(!retval)

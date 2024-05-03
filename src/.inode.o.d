@@ -1,4 +1,4 @@
-hash.o: /home/prayer/os/project2210132-232458/src/hash.c \
+inode.o: /home/prayer/os/project2210132-232458/src/inode.c \
  include/linux/compiler-version.h include/linux/kconfig.h \
  include/generated/autoconf.h include/linux/compiler_types.h \
  include/linux/compiler_attributes.h include/linux/compiler-gcc.h \
@@ -272,6 +272,6 @@ hash.o: /home/prayer/os/project2210132-232458/src/hash.c \
  include/linux/hugetlb_inline.h \
  /home/prayer/os/project2210132-232458/src/../include/XCraft.h \
  include/generated/uapi/linux/version.h \
- /home/prayer/os/project2210132-232458/src/../include/hash.h \
+ /home/prayer/os/project2210132-232458/src/../include/bitmap.h \
  /home/prayer/os/project2210132-232458/src/../include/XCraft.h \
- /home/prayer/os/project2210132-232458/src/../include/bitmap.h
+ /home/prayer/os/project2210132-232458/src/../include/hash.h
