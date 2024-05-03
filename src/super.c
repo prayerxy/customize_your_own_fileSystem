@@ -159,12 +159,8 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
     struct buffer_head *bh3;
     struct XCraft_group_desc *disk_gdb ;
     int i=0;
+    //s_gdb_count是组描述符占多少个块
     for(i=0;i<sb_info->s_gdb_count;i++){
-        // bh1 = sb_bread(sb, i+1);
-        // if(!bh1)
-        //     return -EIO;
-        // struct XCraft_group_desc *disk_gdb = (struct XCraft_group_desc *)bh1->b_data;
-        // memcpy((char *)disk_gdb, (char *)(sb_info->s_group_desc[i]->b_data), XCRAFT_BLOCK_SIZE);
         mark_buffer_dirty(sb_info->s_group_desc[i]);
         if (wait)
             sync_dirty_buffer(sb_info->s_group_desc[i]);
@@ -180,8 +176,7 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
         bh1 = sb_bread(sb, bg_inode_bitmap);
         if(!bh1)
             return -EIO;
-        disk_gdb = (struct XCraft_group_desc *)bh1->b_data;
-        memcpy((char *)disk_gdb, (char *)(sb_info->s_group_desc[i]->b_data), XCRAFT_BLOCK_SIZE);
+
         mark_buffer_dirty(bh1);
         if (wait)
             sync_dirty_buffer(bh1);

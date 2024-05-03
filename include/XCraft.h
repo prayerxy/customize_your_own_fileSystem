@@ -24,7 +24,7 @@
 #define XCraft_BG_ISINIT(flag) (flag&XCraft_BG_INODE_INIT)&&(flag&XCraft_BG_BLOCK_INIT)
 // inode flags
 #define XCraft_INODE_HASH_TREE 0x0001
-#define XCraft_INODE_HASH_TREE_IS(flag) flag & XCraft_INODE_HASH_TREE
+#define XCraft_INODE_ISHASH_TREE(flag) flag & XCraft_INODE_HASH_TREE
 
 //ifree_per_group_blo 
 #define XCRAFT_IFREE_PER_GROUP_BLO 1
@@ -135,14 +135,17 @@ struct dx_entry{
 };
 
 //占据一个块
+#define XCRAFT_HTREE_VERSION 6
 struct dx_root{
     //对于 u8 类型的数据，字节序转换是不必要的。
     //其他数据要转换 le16_to_cpu
+    struct dx_root_info{
    __u8 hash_version; /* hash version */
    __u8 indirect_levels; /* 0 if no dx_node else 1 */
    __le16 limit;//最大目录项数 header + entries
    __le16 count;//目录项数  header + entries
-   struct dx_entry entries[0]; /* entries 一个块后面全部是dx_entry */
+    }info;
+    struct dx_entry entries[]; /* entries 一个块后面全部是dx_entry */
 };
 
 struct dx_node
@@ -151,7 +154,7 @@ struct dx_node
     //其他数据要转换 le16_to_cpu
     __le16 limit; /* limit */
     __le16 count; /* count */
-    struct dx_entry entries[0]; /* entries */
+    struct dx_entry entries[]; /* entries */
 };
 
 
@@ -192,11 +195,18 @@ struct XCraft_hash_info
     __u32 *seed;//Hash种子数组
 };
 
-struct XCraft_frame
+struct dx_frame
 {
     struct buffer_head *bh;//dx_entry所在磁盘块
-    struct dx_entry *entri0es;//同一级的dx_entry
+    struct dx_entry *entries;//同一级的dx_entry
     struct dx_entry *at;//最终的dx_entry
+};
+
+struct dx_map_entry
+{
+	u32 hash;
+	u16 offs;
+	u16 size;
 };
 
 struct inode *XCraft_iget(struct super_block *sb, unsigned long ino);

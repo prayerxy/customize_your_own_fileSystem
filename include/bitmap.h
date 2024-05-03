@@ -1,7 +1,6 @@
 #ifndef XCRAFT_BITMAP_H
 #define XCRAFT_BITMAP_H
 
-#include <linux/bitmap.h>
 #include "XCraft.h"
 
 static inline int write_group_inode_bitmap(struct XCraft_superblock_info *sbi, xcraft_group_t group){
@@ -154,7 +153,7 @@ out:
 //inode_begin是此块组的第一个inode号
 static inline uint32_t get_first_free_bits(unsigned long *freemap,
                                            unsigned long size,
-                                           uint32_t len,uint32_t inode_begin)
+                                           uint32_t len,uint32_t begin)
 {
 
     uint32_t bit, prev = 0, count = 0;
@@ -164,7 +163,7 @@ static inline uint32_t get_first_free_bits(unsigned long *freemap,
         prev = bit;
         if (++count == len) {
             bitmap_clear(freemap, bit - len + 1, len);
-            return (bit - len + 1)+inode_begin;
+            return (bit - len + 1)+begin;
         }
     }
     return 0;

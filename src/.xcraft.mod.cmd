@@ -1,1 +1,1 @@
-cmd_/home/zjr/project2210132-232458/src/xcraft.mod := { echo  /home/zjr/project2210132-232458/src/super.o /home/zjr/project2210132-232458/src/inode.o;  echo; } > /home/zjr/project2210132-232458/src/xcraft.mod
+cmd_/home/prayer/os/project2210132-232458/src/xcraft.mod := printf '%s\n'   super.o hash.o inode.o | awk '!x[$$0]++ { print("/home/prayer/os/project2210132-232458/src/"$$0) }' > /home/prayer/os/project2210132-232458/src/xcraft.mod

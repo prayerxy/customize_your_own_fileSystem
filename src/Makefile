@@ -1,5 +1,5 @@
 obj-m += xcraft.o
-xcraft-objs :=  super.o inode.o 
+xcraft-objs :=  super.o hash.o inode.o 
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
 

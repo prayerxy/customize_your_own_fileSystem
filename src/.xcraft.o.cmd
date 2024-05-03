@@ -1,1 +1,1 @@
-cmd_/home/zjr/project2210132-232458/src/xcraft.o := ld  -m elf_x86_64 -z noexecstack     -r -o /home/zjr/project2210132-232458/src/xcraft.o /home/zjr/project2210132-232458/src/super.o /home/zjr/project2210132-232458/src/inode.o
+cmd_/home/prayer/os/project2210132-232458/src/xcraft.o := ld -m elf_x86_64 -z noexecstack   -r -o /home/prayer/os/project2210132-232458/src/xcraft.o @/home/prayer/os/project2210132-232458/src/xcraft.mod 
