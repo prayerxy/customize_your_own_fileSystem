@@ -1,5 +1,6 @@
 #include "../include/inode.h"
 #include "../include/bitmap.h"
+#include "../include/gb.h"
 #include <endian.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,20 +8,6 @@
 //  additional
 //  获取块组描述符
 //	
-static struct XCraft_group_desc *XCraft_get_group_desc(struct XCraft_super_block_info *sb_info, uint32_t block_group)
-{
-	struct buffer_head **s_group_desc = sb_info->s_group_desc;
-	if (block_group >= sb_info->s_groups_count)
-	{
-		printk("block_group >= s_groups_count!\n");
-		return NULL;
-	}
-	uint32_t group_desc = block_group / XCRAFT_GROUP_DESCS_PER_BLOCK;
-	uint32_t offset = block_group % XCRAFT_GROUP_DESCS_PER_BLOCK;
-	struct XCraft_group_desc *desc = (struct XCraft_group_desc *)s_group_desc[group_desc]->b_data;
-
-	return desc + offset;
-}
 
 // 由ino获取指定的inode
 static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
@@ -41,7 +28,7 @@ static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 		return ERR_PTR(-EINVAL);
 
 	// 获取块组描述符
-	struct XCraft_group_desc *desc = XCraft_get_group_desc(sb_info, block_group);
+	struct XCraft_group_desc *desc = get_group_desc2(sb_info, block_group);
 	if (!desc){
 		printk("desc is NULL!\n");
 		return ERR_PTR(-EINVAL);
