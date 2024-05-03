@@ -361,7 +361,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	}
 
 	root = (struct dx_root *) bh->b_data;
-	hinfo->hash_version = root->hash_version;
+	hinfo->hash_version = root->info.hash_version;
 
 	hinfo->seed = XCRAFT_SB(sb)->s_hash_seed;
 	if(entry)
@@ -370,7 +370,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 
 	// 由indirect_levels字段可以判断我们的哈希树有几级
 	// indirect字段如果大于1不合理，只有dx_root和dx_node两级
-	indirect = root->indirect_levels;
+	indirect = root->info.indirect_levels;
 	if(indirect > 1){
 		brelse(bh);
 		*err = ERR_BAD_DX_DIR;
@@ -379,7 +379,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	
 
 	
-	
+fail:
 
 	return NULL;
 }

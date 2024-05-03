@@ -1,8 +1,8 @@
-cmd_/home/zjr/project2210132-232458/src/super.o := gcc -Wp,-MMD,/home/zjr/project2210132-232458/src/.super.o.d  -nostdinc -isystem /usr/lib/gcc/x86_64-linux-gnu/9/include -I./arch/x86/include -I./arch/x86/include/generated  -I./include -I./arch/x86/include/uapi -I./arch/x86/include/generated/uapi -I./include/uapi -I./include/generated/uapi -include ./include/linux/compiler-version.h -include ./include/linux/kconfig.h -include ./include/linux/compiler_types.h -D__KERNEL__ -fmacro-prefix-map=./= -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -fshort-wchar -fno-PIE -Werror=implicit-function-declaration -Werror=implicit-int -Werror=return-type -Wno-format-security -std=gnu89 -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx -fcf-protection=none -m64 -falign-jumps=1 -falign-loops=1 -mno-80387 -mno-fp-ret-in-387 -mpreferred-stack-boundary=3 -mskip-rax-setup -mtune=generic -mno-red-zone -mcmodel=kernel -DCONFIG_X86_X32_ABI -Wno-sign-compare -fno-asynchronous-unwind-tables -mindirect-branch=thunk-extern -mindirect-branch-register -mfunction-return=thunk-extern -fno-jump-tables -fno-delete-null-pointer-checks -Wno-frame-address -Wno-format-truncation -Wno-format-overflow -Wno-address-of-packed-member -O2 --param=allow-store-data-races=0 -Wframe-larger-than=1024 -fstack-protector-strong -Wimplicit-fallthrough=5 -Wno-main -Wno-unused-but-set-variable -Wno-unused-const-variable -fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-stack-clash-protection -g -pg -mrecord-mcount -mfentry -DCC_USING_FENTRY -Wdeclaration-after-statement -Wvla -Wno-pointer-sign -Wno-stringop-truncation -Wno-array-bounds -Wno-stringop-overflow -Wno-restrict -Wno-maybe-uninitialized -Wno-alloc-size-larger-than -fno-strict-overflow -fno-stack-check -fconserve-stack -Werror=date-time -Werror=incompatible-pointer-types -Werror=designated-init -Wno-packed-not-aligned  -fsanitize=bounds -fsanitize=shift -fsanitize=bool -fsanitize=enum  -DMODULE  -DKBUILD_BASENAME='"super"' -DKBUILD_MODNAME='"xcraft"' -D__KBUILD_MODNAME=kmod_xcraft -c -o /home/zjr/project2210132-232458/src/super.o /home/zjr/project2210132-232458/src/super.c
+cmd_/home/zjr/project2210132-232458/src/inode.o := gcc -Wp,-MMD,/home/zjr/project2210132-232458/src/.inode.o.d  -nostdinc -isystem /usr/lib/gcc/x86_64-linux-gnu/9/include -I./arch/x86/include -I./arch/x86/include/generated  -I./include -I./arch/x86/include/uapi -I./arch/x86/include/generated/uapi -I./include/uapi -I./include/generated/uapi -include ./include/linux/compiler-version.h -include ./include/linux/kconfig.h -include ./include/linux/compiler_types.h -D__KERNEL__ -fmacro-prefix-map=./= -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -fshort-wchar -fno-PIE -Werror=implicit-function-declaration -Werror=implicit-int -Werror=return-type -Wno-format-security -std=gnu89 -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx -fcf-protection=none -m64 -falign-jumps=1 -falign-loops=1 -mno-80387 -mno-fp-ret-in-387 -mpreferred-stack-boundary=3 -mskip-rax-setup -mtune=generic -mno-red-zone -mcmodel=kernel -DCONFIG_X86_X32_ABI -Wno-sign-compare -fno-asynchronous-unwind-tables -mindirect-branch=thunk-extern -mindirect-branch-register -mfunction-return=thunk-extern -fno-jump-tables -fno-delete-null-pointer-checks -Wno-frame-address -Wno-format-truncation -Wno-format-overflow -Wno-address-of-packed-member -O2 --param=allow-store-data-races=0 -Wframe-larger-than=1024 -fstack-protector-strong -Wimplicit-fallthrough=5 -Wno-main -Wno-unused-but-set-variable -Wno-unused-const-variable -fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-stack-clash-protection -g -pg -mrecord-mcount -mfentry -DCC_USING_FENTRY -Wdeclaration-after-statement -Wvla -Wno-pointer-sign -Wno-stringop-truncation -Wno-array-bounds -Wno-stringop-overflow -Wno-restrict -Wno-maybe-uninitialized -Wno-alloc-size-larger-than -fno-strict-overflow -fno-stack-check -fconserve-stack -Werror=date-time -Werror=incompatible-pointer-types -Werror=designated-init -Wno-packed-not-aligned  -fsanitize=bounds -fsanitize=shift -fsanitize=bool -fsanitize=enum  -DMODULE  -DKBUILD_BASENAME='"inode"' -DKBUILD_MODNAME='"xcraft"' -D__KBUILD_MODNAME=kmod_xcraft -c -o /home/zjr/project2210132-232458/src/inode.o /home/zjr/project2210132-232458/src/inode.c
 
-source_/home/zjr/project2210132-232458/src/super.o := /home/zjr/project2210132-232458/src/super.c
+source_/home/zjr/project2210132-232458/src/inode.o := /home/zjr/project2210132-232458/src/inode.c
 
-deps_/home/zjr/project2210132-232458/src/super.o := \
+deps_/home/zjr/project2210132-232458/src/inode.o := \
   include/linux/compiler-version.h \
     $(wildcard include/config/CC_VERSION_TEXT) \
   include/linux/kconfig.h \
@@ -993,22 +993,12 @@ deps_/home/zjr/project2210132-232458/src/super.o := \
     $(wildcard include/config/MODULES_USE_ELF_REL) \
     $(wildcard include/config/MODULES_USE_ELF_RELA) \
   arch/x86/include/asm/orc_types.h \
-  include/linux/slab.h \
-    $(wildcard include/config/DEBUG_SLAB) \
-    $(wildcard include/config/FAILSLAB) \
-    $(wildcard include/config/HAVE_HARDENED_USERCOPY_ALLOCATOR) \
-    $(wildcard include/config/SLAB) \
-    $(wildcard include/config/SLUB) \
-    $(wildcard include/config/SLOB) \
-    $(wildcard include/config/CC_IS_GCC) \
-    $(wildcard include/config/CLANG_VERSION) \
-  include/linux/statfs.h \
-  arch/x86/include/uapi/asm/statfs.h \
-  include/asm-generic/statfs.h \
-  include/uapi/asm-generic/statfs.h \
   /home/zjr/project2210132-232458/src/../include/XCraft.h \
   include/generated/uapi/linux/version.h \
+  /home/zjr/project2210132-232458/src/../include/bitmap.h \
+  /home/zjr/project2210132-232458/src/../include/XCraft.h \
+  /home/zjr/project2210132-232458/src/../include/hash.h \
 
-/home/zjr/project2210132-232458/src/super.o: $(deps_/home/zjr/project2210132-232458/src/super.o)
+/home/zjr/project2210132-232458/src/inode.o: $(deps_/home/zjr/project2210132-232458/src/inode.o)
 
-$(deps_/home/zjr/project2210132-232458/src/super.o):
+$(deps_/home/zjr/project2210132-232458/src/inode.o):
