@@ -347,7 +347,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	struct super_block *sb = dir->i_sb;
 	u32 hash;
 	unsigned int i_block;
-	unsigned indirect;
+	unsigned indirect, count;
 
 	frame->bh = NULL;
 
@@ -376,14 +376,38 @@ dx_probe(struct qstr *entry, struct inode *dir,
 		*err = ERR_BAD_DX_DIR;
 		goto fail;
 	}
-	
+
+	entries = (struct dx_entry *) (((char *)&root->info) + sizeof(root->info));
+
+	// 比较limit字段
+	if(root->info.limit != dx_root_limit()){
+		brelse(bh);
+		*err = ERR_BAD_DX_DIR;
+		goto fail;
+	}
+
+	// 开始寻找目录项
+	while(1){
+		count = root->info.count;
+		if(!count || count > root->info.limit){
+			brelse(bh);
+			*err = ERR_BAD_DX_DIR;
+			goto fail2;
+		}
+
+
+	}
+
+fail2:
+	while(frame >= frame_in){
+		brelse(frame->bh);
+		frame--;
+	}
 
 	
 fail:
-
 	return NULL;
 }
-
 
 // hash tree添加目录项
 static int XCraft_dx_add_entry(struct dentry *dentry, struct inode *inode){
