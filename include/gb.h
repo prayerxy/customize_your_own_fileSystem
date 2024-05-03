@@ -31,6 +31,7 @@ static inline int group_free_inodes_count(struct XCraft_superblock_info *sbi,str
 }
 
 static inline int group_free_blocks_count(struct XCraft_superblock_info *sbi,struct XCraft_group_desc* desc)
+static inline int group_free_blocks_count(struct XCraft_superblock_info *sbi,struct XCraft_group_desc* desc)
 {
     return le16_to_cpu(desc->bg_free_blocks_count);
 }

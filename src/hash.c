@@ -30,6 +30,9 @@ static int XCraft_make_hash_tree(handle_t *handle, const struct qstr *qstr,
 	struct dx_root	*root;
 	struct dx_frame frames[XCRAFT_HTREE_LEVEL],*frame;
 	struct dx_entry *entries;
+
+	printk(KERN_DEBUG "Creating index: inode %lu\n", dir->i_ino);
+	root=kmallo
     return 0;
 }
 
