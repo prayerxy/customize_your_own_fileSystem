@@ -9,6 +9,7 @@
 #include "../include/XCraft.h"
 #include "../include/hash.h"
 #include "../include/bitmap.h"
+#include "../include/bitmap.h"
 // hash value to caculate 
 // name:文件名 len:文件名长度  hinfo:hash值(储存hash值的结构体)
 int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo){
@@ -119,6 +120,7 @@ static int dx_make_map(struct inode*dir,struct buffer_head*bh,struct XCraft_hash
  * directory, and adds the dentry to the indexed directory.
  */
 static int XCraft_make_hash_tree(const struct qstr *qstr,
+static int XCraft_make_hash_tree(const struct qstr *qstr,
 			    struct inode *dir,
 			    struct inode *inode, struct buffer_head *bh)
 {
@@ -130,6 +132,10 @@ static int XCraft_make_hash_tree(const struct qstr *qstr,
 	struct dx_root	*root;
 	struct dx_frame frames[XCRAFT_HTREE_LEVEL],*frame;
 	struct dx_entry *entries;
+	struct buffer_head *bh2;
+	struct XCraft_dir_entry*de;
+	struct XCraft_hash_info *hinfo;
+	uint32_t bno;
 	struct buffer_head *bh2;
 	struct XCraft_dir_entry*de;
 	struct XCraft_hash_info *hinfo;
@@ -179,12 +185,57 @@ out_frames:
 	mark_buffer_dirty(bh2);
 	dx_release(frames);
 	brelse(bh2);
+	/*root*/
+	root=(struct  dx_root *)bh->b_data;
+	bh2=XCraft_append(dir,&bno);
+	if(!bh2){
+		printk(KERN_ERR "XCraft: make_hash_tree: no memory\n");
+		return -ENOMEM;
+	}
+	XCraft_set_inode_flag(dir,XCraft_INODE_HASH_TREE);
+	//将bh信息复制到bh2
+	memcpy((char*)bh2->b_data,(char*)bh->b_data,XCRAFT_BLOCK_SIZE);
+
+
+	/*更新root*/
+	memset((char*)root,0x00,XCRAFT_BLOCK_SIZE);
+	root->info.hash_version=(uint8_t)XCRAFT_HTREE_VERSION;
+	root->info.count=cpu_to_le16(1);//目录项数目
+	root->info.indirect_levels=0;
+	root->info.limit=cpu_to_le16(dx_root_limit());
+	entries=root->entries;
+	dx_set_block(entries,bno);//bno是物理块号
+
+
+	memset(frames, 0, sizeof(frames));
+	frame=frames;
+	frame->entries=entries;
+	frame->at=entries;
+	frame->bh=bh;
+	//计算新增目录项的hash值
+	XCraft_dirhash(qstr->name,qstr->len,hinfo);
+	//将bh2分裂 bh2最后是两个块中应该插入新目录项的块
+	de=do_split(dir,&bh2,frame,hinfo);
+
+	//将新目录项插入到目录中
+
+
+
+
+out_frames:
+	mark_inode_dirty(dir);
+	mark_buffer_dirty(bh);
+	mark_buffer_dirty(bh2);
+	dx_release(frames);
+	brelse(bh2);
     return 0;
 }
 
 // do_split
 // dir是目录inode   bh是进行分裂的块的buffer_head   frame是上一级的dx_entry位置   hinfo是提前计算目录项的Hash值,用于分裂
 // 1.分裂块
+static struct XCraft_dir_entry *do_split(struct inode *dir,
+			struct buffer_head **bh,struct dx_frame *frame,
 static struct XCraft_dir_entry *do_split(struct inode *dir,
 			struct buffer_head **bh,struct dx_frame *frame,
 			struct XCraft_hash_info *hinfo)

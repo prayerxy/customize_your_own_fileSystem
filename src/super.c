@@ -65,13 +65,18 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
 
     // caculate ino is beyond
     uint32_t s_inodes_count = le32_to_cpu(disk_sb->s_inodes_count);
+
+    uint16_t inode_size;
+    uint32_t blocks_per_group; 
+
+    int i=0;
     if (ino >= s_inodes_count)
         return 0;
 
     // get inode_size
-    uint16_t inode_size = le16_to_cpu(disk_sb->s_inode_size);
+    inode_size = le16_to_cpu(disk_sb->s_inode_size);
     // get blocks_per_group
-    uint32_t blocks_per_group = le32_to_cpu(disk_sb->s_blocks_per_group);
+    blocks_per_group = le32_to_cpu(disk_sb->s_blocks_per_group);
 
     // get inode_block
     uint32_t inode_block_begin = (1 + XCRAFT_DESC_LIMIT_blo) + inode_group * blocks_per_group + 2;
@@ -83,7 +88,7 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
         return -EIO;
     disk_inode = (struct XCraft_inode *)bh->b_data;
     disk_inode += inode_shift_in_block;
-    // 字节序转换存疑?
+    // 字节序转换存疑
     disk_inode->i_mode = cpu_to_le16(inode->i_mode);
     disk_inode->i_uid = cpu_to_le16(i_uid_read(inode));
     disk_inode->i_gid = cpu_to_le16(i_gid_read(inode));
@@ -102,7 +107,7 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     disk_inode->i_blocks_lo = cpu_to_le32(inode->i_blocks);
     disk_inode->i_links_count = cpu_to_le16(inode->i_nlink);
     disk_inode->i_flags = cpu_to_le32(xi->i_flags);
-    int i=0;
+    
     for(i=0;i<XCRAFT_N_BLOCK;i++)
         disk_inode->i_block[i] = cpu_to_le16(xi->i_block[i]);
     strncpy(disk_inode->i_data, xi->i_data,sizeof(xi->i_data));
