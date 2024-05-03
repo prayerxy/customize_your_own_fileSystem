@@ -19,8 +19,8 @@ static inline int write_group_block_bitmap(struct XCraft_superblock_info *sbi, x
 
     //被位图及inodes占用的块数 剩余的是data_blocks
     uint32_t nr_used= desc->bg_nr_blocks-desc->bg_free_blocks_count;
-    memset(bfree, 0xff, XCRAFT_BLOCK_SIZE*bfree_block);
     uint32_t i;
+    memset(bfree, 0xff, XCRAFT_BLOCK_SIZE*bfree_block);
     i = 0;
     while(nr_used){
         uint64_t line = 0xffffffffffffffff;

@@ -92,14 +92,15 @@ static int dx_make_map(struct inode*dir,struct buffer_head*bh,struct XCraft_hash
 
 	while((char*)de<base+buflen){
 		if(de->inode&&de->name_len){
-			dx_set_hash(&map_tail->hash,h->hash);
-			dx_set_block(&map_tail->block,de->inode);
+			//计算Hash
 			XCraft_dirhash(de->name,de->name_len,h);
 			map_tail--;
-			map_tail->hash=h.hash;
+			map_tail->hash=h->hash;
 			map_tail->offs=(u16)((char*)de-base);
 			map_tail->size=le16_to_cpu(de->rec_len);
 			count++;
+			//存疑
+			cond_resched();
 		}
 		//读取此目录项的长度
 		rec_len=le16_to_cpu(de->rec_len);
@@ -107,6 +108,47 @@ static int dx_make_map(struct inode*dir,struct buffer_head*bh,struct XCraft_hash
 		de=(struct XCraft_dir_entry*)((char*)de+rec_len);
 	}
 	return count;
+}
+
+
+static void dx_sort_map (struct dx_map_entry *map, unsigned count){
+	struct dx_map_entry *p,*q,*top=map+count-1;
+	struct dx_map_entry tmp;
+	// unsigned i,j;
+
+	// for(i=1;i<count;i++){
+	// 	tmp=map[i];
+	// 	for(j=i;j>0;j--){
+	// 		p=&map[j-1];
+	// 		q=&map[j];
+	// 		if(p->hash<=q->hash)
+	// 			break;
+	// 		map[j]=*p;
+	// 	}
+	// 	map[j]=tmp;
+	// }
+	int more;
+	/* Combsort until bubble sort doesn't suck */
+	while (count > 2) {
+		count = count*10/13;
+		if (count - 9 < 2) /* 9, 10 -> 11 */
+			count = 11;
+		for (p = top, q = p - count; q >= map; p--, q--)
+			if (p->hash < q->hash)
+				swap(*p, *q);
+	}
+	/* Garden variety bubble sort */
+	do {
+		more = 0;
+		q = top;
+		while (q-- > map) {
+			if (q[1].hash >= q[0].hash)
+				continue;
+			swap(*(q+1), *q);
+			more = 1;
+		}
+	} while(more);
+
 }
 
 // hash tree to build
@@ -119,7 +161,6 @@ static int dx_make_map(struct inode*dir,struct buffer_head*bh,struct XCraft_hash
  * This converts a one block unindexed directory to a 3 block indexed
  * directory, and adds the dentry to the indexed directory.
  */
-static int XCraft_make_hash_tree(const struct qstr *qstr,
 static int XCraft_make_hash_tree(const struct qstr *qstr,
 			    struct inode *dir,
 			    struct inode *inode, struct buffer_head *bh)
@@ -136,55 +177,9 @@ static int XCraft_make_hash_tree(const struct qstr *qstr,
 	struct XCraft_dir_entry*de;
 	struct XCraft_hash_info *hinfo;
 	uint32_t bno;
-	struct buffer_head *bh2;
-	struct XCraft_dir_entry*de;
-	struct XCraft_hash_info *hinfo;
-	uint32_t bno;
+
 
 	printk(KERN_DEBUG "Creating index: inode %lu\n", dir->i_ino);
-	/*root*/
-	root=(struct  dx_root *)bh->b_data;
-	bh2=XCraft_append(dir,&bno);
-	if(!bh2){
-		printk(KERN_ERR "XCraft: make_hash_tree: no memory\n");
-		return -ENOMEM;
-	}
-	XCraft_set_inode_flag(dir,XCraft_INODE_HASH_TREE);
-	//将bh信息复制到bh2
-	memcpy((char*)bh2->b_data,(char*)bh->b_data,XCRAFT_BLOCK_SIZE);
-
-
-	/*更新root*/
-	memset((char*)root,0x00,XCRAFT_BLOCK_SIZE);
-	root->info.hash_version=(uint8_t)XCRAFT_HTREE_VERSION;
-	root->info.count=cpu_to_le16(1);//目录项数目
-	root->info.indirect_levels=0;
-	root->info.limit=cpu_to_le16(dx_root_limit());
-	entries=root->entries;
-	dx_set_block(entries,bno);//bno是物理块号
-
-
-	memset(frames, 0, sizeof(frames));
-	frame=frames;
-	frame->entries=entries;
-	frame->at=entries;
-	frame->bh=bh;
-	//计算新增目录项的hash值
-	XCraft_dirhash(qstr->name,qstr->len,hinfo);
-	//将bh2分裂 bh2最后是两个块中应该插入新目录项的块
-	de=do_split(dir,&bh2,frame,hinfo);
-
-	//将新目录项插入到目录中
-
-
-
-
-out_frames:
-	mark_inode_dirty(dir);
-	mark_buffer_dirty(bh);
-	mark_buffer_dirty(bh2);
-	dx_release(frames);
-	brelse(bh2);
 	/*root*/
 	root=(struct  dx_root *)bh->b_data;
 	bh2=XCraft_append(dir,&bno);
@@ -236,16 +231,17 @@ out_frames:
 // 1.分裂块
 static struct XCraft_dir_entry *do_split(struct inode *dir,
 			struct buffer_head **bh,struct dx_frame *frame,
-static struct XCraft_dir_entry *do_split(struct inode *dir,
-			struct buffer_head **bh,struct dx_frame *frame,
 			struct XCraft_hash_info *hinfo)
 {
     unsigned blocksize =XCRAFT_BLOCK_SIZE;
 	uint32_t bno;
+	uint32_t hash2;
 	struct buffer_head *bh2;
 	char*data1=(*bh)->b_data,*data2;
 	struct dx_map_entry *map;
+	unsigned split, move, size;
 	int count;
+	int i;
 
 	//第三个块
 	bh2=XCraft_append(dir,&bno);
@@ -256,4 +252,33 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 	data2=bh2->b_data;
 	map = (struct dx_map_entry *) (data2 + blocksize);
 	count=dx_make_map(dir,*bh,hinfo,map);
+	if(count<0){
+		printk(KERN_ERR "XCraft: do_split: no memory\n");
+		return NULL;
+	}
+	map-=count;
+	dx_sort_map(map, count);
+
+	/* Ensure that neither split block is over half full */
+	size = 0;
+	move = 0;
+	for (i = count-1; i >= 0; i--) {
+		/* is more than half of this entry in 2nd half of the block? */
+		if (size + map[i].size/2 > blocksize/2)
+			break;
+		size += map[i].size;
+		move++;
+	}
+	/*
+	 * map index at which we will split
+	 *
+	 * If the sum of active entries didn't exceed half the block size, just
+	 * split it in half by count; each resulting block will have at least
+	 * half the space free.
+	 */
+	if (i > 0)
+		split = count - move;
+	else
+		split = count/2;
+	hash2=map[split].hash;
 }

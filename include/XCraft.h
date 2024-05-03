@@ -135,6 +135,7 @@ struct XCraft_dir_entry{
     //le32_to_cpu
     __le32 inode; /* inode number */
     __le16 rec_len; /* record length */
+    __u8 name_len; /* name length */
     __u8 file_type; /* file type */
     char name[XCRAFT_NAME_LEN]; /* file name */
 };
