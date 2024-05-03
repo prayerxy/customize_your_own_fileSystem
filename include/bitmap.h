@@ -1,11 +1,7 @@
-
-
 #ifndef XCRAFT_BITMAP_H
 #define XCRAFT_BITMAP_H
 
-#include <stdlib.h>
 #include "XCraft.h"
-#include "inode.h"
 #include "gb.h"
 
 static inline int write_group_inode_bitmap(struct XCraft_superblock_info *sbi, xcraft_group_t group){

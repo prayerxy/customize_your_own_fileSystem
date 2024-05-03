@@ -1,3 +1,6 @@
+#ifndef XCRAFT_HASH_H
+#define XCRAFT_HASH_H
+
 #include <linux/fs.h>
 #include <linux/jbd.h>
 #include <linux/ext3_fs.h>
@@ -20,3 +23,5 @@ static int XCraft_make_hash_tree(handle_t *handle, const struct qstr *qstr,
 static struct XCraft_dir_entry *do_split(handle_t *handle, struct inode *dir,
 			struct buffer_head **bh,struct XCraft_frame *frame,
 			struct XCraft_hash_info *hinfo);
+
+#endif
