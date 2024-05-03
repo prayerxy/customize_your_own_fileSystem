@@ -7,16 +7,13 @@
 #include <linux/slab.h>
 #include <linux/statfs.h>
 #include "../include/XCraft.h"
-#include "../include/gb.h"
-#include "../include/inode.h"
-extern struct inode *XCraft_iget(struct super_block *sb, unsigned long ino);
-extern int inode_get_block_group(struct XCraft_superblock_info *sb_info, uint32_t ino);
-extern int inode_get_block_group_shift(struct XCraft_superblock_info *sb_info, uint32_t ino);
+
+
 // slab cache for XCraft_inode_info
 static struct kmem_cache *XCraft_inode_cache;
 
 // init our slab cache
-static int XCraft_init_inode_cache(void)
+int XCraft_init_inode_cache(void)
 {
     XCraft_inode_cache = kmem_cache_create("XCraft_inode_cache",
                                            sizeof(struct XCraft_inode_info),
@@ -27,7 +24,7 @@ static int XCraft_init_inode_cache(void)
 }
 
 // destroy our slab cache
-static int XCraft_destroy_inode_cache(void)
+int XCraft_destroy_inode_cache(void)
 {
     kmem_cache_destroy(XCraft_inode_cache);
     return 0;
@@ -43,7 +40,7 @@ static struct inode *XCraft_alloc_inode(struct super_block *sb)
 }
 
 // destroy_inode
-static void XCraft_destroy_inode(struct inode *inode)
+void XCraft_destroy_inode(struct inode *inode)
 {
     struct XCraft_inode_info *xi = XCRAFT_I(inode);
     kmem_cache_free(XCraft_inode_cache, xi);

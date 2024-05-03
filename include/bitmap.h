@@ -1,8 +1,8 @@
 #ifndef XCRAFT_BITMAP_H
 #define XCRAFT_BITMAP_H
 
+#include <linux/bitmap.h>
 #include "XCraft.h"
-#include "gb.h"
 
 static inline int write_group_inode_bitmap(struct XCraft_superblock_info *sbi, xcraft_group_t group){
     // struct XCraft_ibmap_info *ibmap_info = sbi->s_ibmap_info[group];
@@ -11,27 +11,29 @@ static inline int write_group_inode_bitmap(struct XCraft_superblock_info *sbi, x
     //一开始已经初始化为全1
     return 0;
 }
-struct inline int write_group_block_bitmap(struct XCraft_superblock_info *sbi, xcraft_group_t group){
+static inline int write_group_block_bitmap(struct XCraft_superblock_info *sbi, xcraft_group_t group){
     struct XCraft_ibmap_info *ibmap_info = sbi->s_ibmap_info[group];
     uint64_t*bfree=(uint64_t *)ibmap_info->bfree_bitmap;
     struct buffer_head *bh = NULL;
     struct XCraft_group_desc *desc=get_group_desc(sbi,group,bh);
-    uint32_t bfree_block=XCRAFT_BFREE_PER_GROUP_BLO(le16_to_cpu(desc[uninit].bg_nr_blocks));
+    uint32_t bfree_block=XCRAFT_BFREE_PER_GROUP_BLO(le16_to_cpu(desc->bg_nr_blocks));
 
     //被位图及inodes占用的块数 剩余的是data_blocks
     uint32_t nr_used= desc->bg_nr_blocks-desc->bg_free_blocks_count;
     memset(bfree, 0xff, XCRAFT_BLOCK_SIZE*bfree_block);
-    uint32_t i=0;
+    uint32_t i;
+    i = 0;
     while(nr_used){
         uint64_t line = 0xffffffffffffffff;
         //从低位开始清0 直至清除nr_used个位
-        for (uint64_t mask = 0x1; mask; mask <<= 1) {
+        uint64_t mask;
+        for (mask = 0x1; mask; mask <<= 1) {
             line &= ~mask;
             nr_used--;
             if (!nr_used)
                 break;
         }
-        bfree[i] = htole64(line);
+        bfree[i] = cpu_to_le64(line);
         i++;
     }
     //磁盘上没有更改bitmap，但是内存中的bitmap已经改变，在之后同步再写入磁盘
@@ -42,7 +44,7 @@ struct inline int write_group_block_bitmap(struct XCraft_superblock_info *sbi, x
 //如果没有，需要新建一个块组 更改块组描述符为Init状态
 // get first free inode
 //返回desc  offset是desc在此块中的偏移量
-static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_info* sbi,buffer_head *group_desc_bh){
+static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_info* sbi,struct buffer_head *group_desc_bh){
     int blo_t=0;
     struct buffer_head *bh=sbi->s_group_desc[blo_t];
     struct XCraft_group_desc *desc=NULL;
@@ -71,7 +73,7 @@ static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_inf
             desc[uninit].bg_inode_bitmap=cpu_to_le32(bg_inode_bitmap);
             desc[uninit].bg_inode_table=cpu_to_le32(bg_inode_table);
             
-            assert(desc[uninit].bg_nr_inodes!=0);
+            // assert(desc[uninit].bg_nr_inodes!=0);
             uint32_t inode_str_blos=le16_to_cpu(desc[uninit].bg_nr_inodes)/XCRAFT_INODES_PER_BLOCK;
             desc[uninit].bg_free_blocks_count=cpu_to_le32(le16_to_cpu(desc[uninit].bg_nr_blocks)-XCRAFT_IFREE_PER_GROUP_BLO-XCRAFT_BFREE_PER_GROUP_BLO(le16_to_cpu(desc[uninit].bg_nr_blocks))-inode_str_blos);
             desc[uninit].bg_free_inodes_count=cpu_to_le32(desc[uninit].bg_nr_inodes);
@@ -109,7 +111,7 @@ static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_inf
             desc2[next_init_group].bg_inode_bitmap=cpu_to_le32(bg_inode_bitmap);
             desc2[next_init_group].bg_inode_table=cpu_to_le32(bg_inode_table);
             
-            assert(desc2[next_init_group].bg_nr_inodes!=0);
+            //assert(desc2[next_init_group].bg_nr_inodes!=0);
             uint32_t inode_str_blos=le16_to_cpu(desc2[next_init_group].bg_nr_inodes)/XCRAFT_INODES_PER_BLOCK;
             desc2[next_init_group].bg_free_blocks_count=cpu_to_le32(le16_to_cpu(desc2[next_init_group].bg_nr_blocks)-XCRAFT_IFREE_PER_GROUP_BLO-XCRAFT_BFREE_PER_GROUP_BLO(le16_to_cpu(desc2[next_init_group].bg_nr_blocks))-inode_str_blos);
             desc2[next_init_group].bg_free_inodes_count=cpu_to_le32(desc2[next_init_group].bg_nr_inodes);
@@ -137,7 +139,7 @@ out:
         sbi->s_super->s_free_blocks_count=cpu_to_le32(free_blocks_count);
         sbi->s_La_init_group=s_La_init_group;//最后一个初始化的块组位置
 
-        struct buffer_head *bh2 = sbi->s_super->s_sbh;
+        struct buffer_head *bh2 = sbi->s_sbh;
         struct XCraft_superblock *tmp = (struct XCraft_superblock *)bh2->b_data;
         memcpy((char *)tmp, (char *)sbi->s_super, sizeof(struct XCraft_superblock));
 
@@ -178,11 +180,12 @@ static inline uint32_t get_first_free_bits(unsigned long *freemap,
 static inline uint32_t get_free_inode(struct XCraft_superblock_info *sbi){
     xcraft_group_t group = sbi->s_La_init_group;
     struct buffer_head *bh = NULL;
+    int i;
     
     struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
     if(group_free_inodes_count(sbi, desc) == 0){
         //先遍历所有块组
-        for(int i = 0; i < sbi->s_La_init_group; i++){
+        for(i = 0; i < sbi->s_La_init_group; i++){
             desc = get_group_desc(sbi, i, bh);
             if(group_free_inodes_count(sbi, desc) > 0){
                 group = i;
@@ -223,9 +226,10 @@ static inline int get_free_blocks(struct XCraft_superblock_info *sbi, int len){
     xcraft_group_t group = sbi->s_La_init_group;
     struct buffer_head *bh = NULL;
     struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
+    int i;
     if(group_free_blocks_count(sbi, desc) < len){
         //先遍历所有块组
-        for(int i = 0; i < sbi->s_La_init_group; i++){
+        for(i = 0; i < sbi->s_La_init_group; i++){
             desc = get_group_desc(sbi, i, bh);
             if(group_free_blocks_count(sbi, desc) >= len){
                 group = i;
