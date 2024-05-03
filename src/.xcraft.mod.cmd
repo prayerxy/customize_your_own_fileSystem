@@ -1,1 +1,0 @@
-cmd_/home/zjr/project2210132-232458/src/xcraft.mod := { echo  /home/zjr/project2210132-232458/src/super.o /home/zjr/project2210132-232458/src/inode.o;  echo; } > /home/zjr/project2210132-232458/src/xcraft.mod

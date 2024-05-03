@@ -6,15 +6,17 @@
 
 #include "../include/XCraft.h"
 #include "../include/bitmap.h"
+#include "../include/hash.h"
 // #include <endian.h>
 // #include <stdint.h>
 // #include <stdio.h>
 // #include <stdlib.h>
-//  additional
-//  获取块组描述符
+// additional
+// 获取块组描述符
 
 static const struct inode_operations XCraft_inode_operations;
 static const struct inode_operations XCraft_symlink_inode_operations;
+
 // 由ino获取指定的inode
 struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 {
@@ -129,7 +131,7 @@ failed:
 // qstr = &dentry->d_name
 // 注意inode_init_owner的版本号的变化
 // qstr在这里没有使用，因为还没插入目录项
-struct inode *XCraft_new_inode(struct inode *dir, struct qstr*qstr,int mode){					
+struct inode *XCraft_new_inode(struct inode *dir, struct qstr*qstr, int mode){					
 	struct inode *inode = NULL;
 	struct XCraft_inode_info *xi = NULL;
 	struct super_block *sb = dir->i_sb;
@@ -259,13 +261,202 @@ failed_ino:
 	return ERR_PTR(ret);
 }
 
+// 在bh对应的磁盘块中插入目录项
+// de记录最后的目录项位置, bh为插入该目录项所在的磁盘块缓冲区
+// de 一般传入null，不是null就表明已经是找到了目录项
+static int add_dirent_to_buf(struct dentry *dentry,
+			     struct inode *inode, struct XCraft_dir_entry *de,
+			     struct buffer_head * bh)
+{
+	struct inode *dir = dentry->d_parent->d_inode;
+	struct super_block *sb = dir->i_sb;
+	const char	*name = dentry->d_name.name;
+	int	namelen = dentry->d_name.len;
+	// 最终目录项所在的磁盘块中的偏移量
+	unsigned long offset = 0;
+	// 一个目录项大小
+	unsigned short reclen;
+	char *top;
+
+	reclen = sizeof(struct XCraft_dir_entry);
+	if(!de){
+		de = (struct XCraft_dir_entry *)bh->b_data;
+		// 锁定最大能插入的位置
+		top = bh->b_data + sb->s_blocksize - reclen;
+		
+		// 循环遍历
+		while((char *)de <= top){
+			// 检查是否已经存在该目录项
+			// 比较是否有同名现象
+			if(strncmp(de->name,name,namelen) == 0)
+				brelse(bh);
+				return -EEXIST;
+
+			// 跳出条件为找到一个目录项的inode号为0，此目录项可用
+			if(!de->inode)
+				break;
+			reclen = le16_to_cpu(de->rec_len);
+			// 移动到下一个目录项
+			de = (struct XCraft_dir_entry*)((char *)de + reclen);
+			// 更新offset
+			offset += reclen;
+		}
+
+		// 超了
+		if((char *)de > top)
+			return -ENOSPC;
+	}
+
+	// 对找到的de进行更新
+	// 传进来的inode必须是有效的
+	if (inode){
+		de->inode = cpu_to_le32(inode->i_ino);
+		reclen = sizeof(struct XCraft_dir_entry);
+		de->rec_len = cpu_to_le16(reclen);
+		// 依据i_mode字段对file_type进行赋值
+		if(S_ISDIR(inode->i_mode))
+			de->file_type = XCRAFT_FT_DIR;
+		else if(S_ISREG(inode->i_mode))
+			de->file_type = XCRAFT_FT_REG_FILE;
+		else if(S_ISLNK(inode->i_mode))	
+			de->file_type = XCRAFT_FT_LINK;
+		memcpy(de->name, name, namelen);
+		// 最后一个字符置为空字符
+		de->name[namelen] = '\0';
+	}
+
+	// dir访问时间更新
+	dir->i_mtime = dir->i_ctime = current_time(dir);
+	mark_inode_dirty(dir);
+	// 更新bh
+	mark_buffer_dirty(bh);
+	brelse(bh);
+	return 0;
+}
+
+// frame = dx_probe(&dentry->d_name, dir, &hinfo, frames, &err);
+// entry是目录项名，dir是目录inode，hinfo传入哈希信息，frame_in存储上一级信息，err为错误信息
+static struct dx_frame *
+dx_probe(struct qstr *entry, struct inode *dir,
+	 struct XCraft_hash_info *hinfo, struct dx_frame *frame_in, int *err)
+{	
+	struct dx_entry *at, *entries;
+	struct dx_root *root;
+	struct buffer_head *bh;
+	struct dx_frame *frame = frame_in;
+	struct super_block *sb = dir->i_sb;
+	u32 hash;
+	unsigned int i_block;
+	unsigned indirect;
+
+	frame->bh = NULL;
+
+	// 获取i_block[0]对应的磁盘块
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
+	i_block = dir_info->i_block[0];
+	bh = sb_bread(sb, i_block);
+	if(!bh){
+		*err = -EIO;
+		return NULL;
+	}
+
+	root = (struct dx_root *) bh->b_data;
+	hinfo->hash_version = root->hash_version;
+
+	hinfo->seed = XCRAFT_SB(sb)->s_hash_seed;
+	if(entry)
+		XCraft_dirhash(entry->name, entry->len, hinfo);
+	hash = hinfo->hash;
+
+	// 由indirect_levels字段可以判断我们的哈希树有几级
+	// indirect字段如果大于1不合理，只有dx_root和dx_node两级
+	indirect = root->indirect_levels;
+	if(indirect > 1){
+		brelse(bh);
+		*err = ERR_BAD_DX_DIR;
+		goto fail;
+	}
+	
+
+	
+	
+
+	return NULL;
+}
+
+
 // hash tree添加目录项
-static int XCraft_dx_add_entry(const struct qstr *qstr, struct inode *dir, struct inode *inode);
+static int XCraft_dx_add_entry(struct dentry *dentry, struct inode *inode){
+	struct dx_frame frames[2], *frame;
+	struct dx_entry *entries, *at;
+	struct XCraft_hash_info hinfo;
+	struct buffer_head * bh;
+	struct inode *dir = dentry->d_parent->d_inode;
+	struct super_block * sb = dir->i_sb;
+	struct XCraft_dir_entry *de;
+	int err;
+
+	frame = dx_probe(&dentry->d_name, dir, &hinfo, frames, &err);
+
+	
+
+
+
+	return 0;
+}
 
 // 提交目录项
 // 0表示添加目录项成功
 static int XCraft_add_entry(struct dentry *dentry, struct inode *inode){
-	return 0;
+	struct inode *dir = dentry->d_parent->d_inode;
+	struct XCraft_inode_info *xi = XCRAFT_I(inode);
+	struct buffer_head *bh = NULL;
+	struct super_block * sb;
+	unsigned int blocksize;
+	unsigned int i_block;
+	int retval;
+
+	// super block
+	// 获取超级块
+	sb = dir->i_sb;
+	// 块大小
+	blocksize = sb->s_blocksize;
+
+	if(!dentry->d_name.len)
+		return -EINVAL;
+	
+	// 判断时现在是否为哈希树
+	if(XCraft_INODE_HASH_TREE_IS(xi->i_flags)){
+		retval = XCraft_dx_add_entry(dentry, inode);
+		// retval为0表示添加目录项成功
+		if(!retval)
+			return retval;
+		// 添加不成功
+		printk("hash tree add entry failed\n");
+		goto end;
+	}
+
+	// 遍历第一个块，此块已经被我们分配过
+	i_block = xi->i_block[0];
+	bh = sb_bread(sb, i_block);
+	if(!bh){
+	    retval = -EIO;
+		goto end;
+	}
+
+	retval = add_dirent_to_buf(dentry, inode, NULL, bh);
+	// 插入成功
+	
+	if(retval == -EEXIST)
+		printk("same name of dentry has been existed\n");
+	else if(retval == -ENOSPC)
+		// 开始建立哈希树
+		retval = XCraft_make_hash_tree(&dentry->d_name, dir, inode, bh);
+	
+put_bh:
+	brelse(bh);
+end:
+	return retval;
 }
 
 
@@ -275,7 +466,12 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode){
 // err是存储的返回的错误信息
 static struct buffer_head * XCraft_dx_find_entry(struct inode *dir,
 			struct qstr *entry, struct XCraft_dir_entry **res_dir,
-			int *err);
+			int *err)
+{
+
+
+	return NULL;
+}
 
 
 
@@ -284,7 +480,12 @@ static struct buffer_head * XCraft_dx_find_entry(struct inode *dir,
 // buffer_head为找到此目录项所在块的buffer_head
 static struct buffer_head *XCraft_find_entry(struct inode *dir,
 					struct qstr *entry,
-					struct XCraft_dir_entry **res_dir);
+					struct XCraft_dir_entry **res_dir)
+{
+
+
+	return NULL;
+}
 
 
 
@@ -342,6 +543,23 @@ static int XCraft_create(struct inode *dir,
 	if(ret)
 		goto end_inode;
 	
+	mark_inode_dirty(inode);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    cur_time = current_time(dir);
+    dir->i_mtime = dir->i_atime = cur_time;
+    inode_set_ctime_to_ts(dir, cur_time);
+#else
+    dir->i_mtime = dir->i_atime = dir->i_ctime = current_time(dir);
+#endif
+
+	if(S_ISDIR(mode))
+		inc_nlink(dir);
+	mark_inode_dirty(dir);
+
+	// setup dentry
+	d_instantiate(dentry, inode);
+
 	return 0;
 
 end_inode:
@@ -373,10 +591,10 @@ static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, un
 
 	// 获取目录项
 	bh = XCraft_find_entry(dir, &dentry->d_name, &de);
-
+	if(!bh)
+		return -EIO;
 	// 由inode号获取inode
 	uint32_t ino = le32_to_cpu(de->inode);
-	// static struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	inode = XCraft_iget(sb, ino);
 	if(IS_ERR(inode)){
 		ret = PTR_ERR(inode);
@@ -389,7 +607,6 @@ static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, un
 
 	// fill the dentry with the inode
 	d_add(dentry, inode);
-
 end:
 	brelse(bh);
 	return NULL;
@@ -398,14 +615,48 @@ end:
 // link
 static int XCraft_link(struct dentry *old_dentry,
 					   struct inode *dir, struct dentry *dentry){
-	
+	// 获取old_dentry对应的inode
+	struct inode *inode = old_dentry->d_inode;
+	int ret;
 
-						
-	return 0;
+	// 对获取的inode进行时间修改
+	inode->i_ctime = current_time(inode);
+	// 硬链接数 + 1
+	inode_inc_link_count(inode);
+	ihold(inode);
+
+	// 添加目录项
+	ret = XCraft_add_entry(dentry, inode);
+	// 表示插入成功
+	if(!ret){
+		mark_inode_dirty(inode);
+		d_instantiate(dentry, inode);
+	}
+	else{
+		drop_nlink(inode);
+		iput(inode);
+	}
+
+	return ret;
 }
 
 // unlink
-static int XCraft_unlink(struct inode *dir, struct dentry *dentry);
+static int XCraft_unlink(struct inode *dir, struct dentry *dentry){
+	struct super_block *sb = dir->i_sb;
+	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
+	// 获取dentry对应的inode
+	struct inode *inode = d_inode(dentry);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    struct timespec64 cur_time;
+#endif
+
+	uint32_t ino = inode->i_ino;
+
+
+
+
+	return 0;
+}
 
 #if MNT_IDMAP_REQUIRED()
 static int XCraft_symlink(struct mnt_idmap *id,
@@ -423,9 +674,38 @@ static int XCraft_symlink(struct inode *dir,
                             const char *symname)
 #endif
 {
+	unsigned int l = strlen(symname) + 1;
+	struct inode *inode = XCraft_new_inode(dir, &dentry->d_name, S_IFLNK | S_IRWXUGO);
+	struct XCraft_inode_info *ci = XCRAFT_I(inode);
+	struct XCraft_inode_info *ci_dir = XCRAFT_I(dir);
+	int ret = 0;
 
+	// 检查inode
+	if (IS_ERR(inode)) {
+        ret = PTR_ERR(inode);
+        goto end;
+    }
 
-	return 0;
+	// Check if symlink content is not too long
+	if(l>sizeof(ci->i_data))
+		return -ENAMETOOLONG;
+
+	// 添加目录项在dir中
+	// 添加目录项
+	ret = XCraft_add_entry(dentry, inode);
+	// 表示插入成功
+	if(!ret){
+		inode->i_link = (char *) ci->i_data;
+		memcpy(inode->i_link, symname, l);
+		inode->i_size = l - 1;
+		mark_inode_dirty(inode);
+		d_instantiate(dentry, inode);
+		return 0;
+	}
+
+end:
+
+	return ret;
 }
 // mkdir
 #if MNT_IDMAP_REQUIRED()
@@ -434,7 +714,8 @@ static int XCraft_mkdir(struct mnt_idmap *id,
                           struct dentry *dentry,
                           umode_t mode)
 {
-	return 0;
+
+	return XCraft_create(id, dir, dentry, mode | S_IFDIR, 0);
 }
 
 #elif USER_NS_REQUIRED()
@@ -443,19 +724,28 @@ static int XCraft_mkdir(struct user_namespace *ns,
                           struct dentry *dentry,
                           umode_t mode)
 {
-    return 0;
+
+    return XCraft_create(ns, dir, dentry, mode | S_IFDIR, 0);
 }
 #else
 static int XCraft_mkdir(struct inode *dir,
                           struct dentry *dentry,
                           umode_t mode)
 {
-    return 0;
+
+
+    return XCraft_create(dir, dentry, mode | S_IFDIR, 0);
 }
 #endif
 
 // rmdir
-static int XCraft_rmdir(struct inode *dir, struct dentry *dentry);
+static int XCraft_rmdir(struct inode *dir, struct dentry *dentry){
+	struct super_block *sb = dir->i_sb;
+
+
+
+	return 0;
+}
 
 // rename
 #if MNT_IDMAP_REQUIRED()
@@ -487,7 +777,11 @@ static int XCraft_rename(struct inode *old_dir,
 }
 // get_link
 static const char *XCraft_get_link(struct dentry *dentry, struct inode *inode,
-									   struct delayed_call *callback);
+									   struct delayed_call *callback)
+{
+
+	return inode->i_link;
+}
 
 static const struct inode_operations XCraft_inode_operations = {
 	.create = XCraft_create,

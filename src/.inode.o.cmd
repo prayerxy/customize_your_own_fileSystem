@@ -997,6 +997,8 @@ deps_/home/zjr/project2210132-232458/src/inode.o := \
   include/generated/uapi/linux/version.h \
   /home/zjr/project2210132-232458/src/../include/bitmap.h \
   /home/zjr/project2210132-232458/src/../include/XCraft.h \
+  /home/zjr/project2210132-232458/src/../include/hash.h \
+  /home/zjr/project2210132-232458/src/../include/bitmap.h \
 
 /home/zjr/project2210132-232458/src/inode.o: $(deps_/home/zjr/project2210132-232458/src/inode.o)
 

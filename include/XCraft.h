@@ -24,7 +24,7 @@
 #define XCraft_BG_ISINIT(flag) (flag&XCraft_BG_INODE_INIT)&&(flag&XCraft_BG_BLOCK_INIT)
 // inode flags
 #define XCraft_INODE_HASH_TREE 0x0001
-#define XCraft_INODE_HASH_TREE_IS(flag) flag & XCraft_INODE_HASH_TREE
+#define XCraft_INODE_ISHASH_TREE(flag) flag & XCraft_INODE_HASH_TREE
 
 //ifree_per_group_blo 
 #define XCRAFT_IFREE_PER_GROUP_BLO 1
@@ -118,7 +118,17 @@ struct XCraft_group_desc{
 //最开始建树的时候，10个以上分类成哈希树
 #define XCRAFT_dentry_LIMIT 10
 
+// hash树的层数
 #define XCRAFT_HTREE_LEVEL 3
+
+// 判断indirect_levels字段是否超出范围
+#define ERR_BAD_DX_DIR	-75000
+
+// 定义file type类型
+#define XCRAFT_FT_LINK 0
+#define XCRAFT_FT_REG_FILE 1
+#define XCRAFT_FT_DIR 2
+
 struct XCraft_dir_entry{
      //对于 u8 类型的数据，字节序转换是不必要的。
     //其他数据要转换 le16_to_cpu
@@ -135,14 +145,17 @@ struct dx_entry{
 };
 
 //占据一个块
+#define XCRAFT_HTREE_VERSION 6
 struct dx_root{
     //对于 u8 类型的数据，字节序转换是不必要的。
     //其他数据要转换 le16_to_cpu
-   __u8 hash_version; /* hash version */
-   __u8 indirect_levels; /* 0 if no dx_node else 1 */
-   __le16 limit;//最大目录项数 header + entries
-   __le16 count;//目录项数  header + entries
-   struct dx_entry entries[0]; /* entries 一个块后面全部是dx_entry */
+    struct dx_root_info{
+        __u8 hash_version; /* hash version */
+        __u8 indirect_levels; /* 0 if no dx_node else 1 */
+        __le16 limit;//最大目录项数 header + entries
+        __le16 count;//目录项数  header + entries
+    }info;
+    struct dx_entry entries[]; /* entries 一个块后面全部是dx_entry */
 };
 
 struct dx_node
@@ -151,7 +164,7 @@ struct dx_node
     //其他数据要转换 le16_to_cpu
     __le16 limit; /* limit */
     __le16 count; /* count */
-    struct dx_entry entries[0]; /* entries */
+    struct dx_entry entries[]; /* entries */
 };
 
 
@@ -178,6 +191,7 @@ struct XCraft_superblock_info{
     unsigned long s_desc_per_block; /* number of group descriptors per block */
     __u32 s_La_init_group;//最后一个初始化的块组
     xcraft_group_t s_groups_count; /* number of groups */
+    __u32 s_hash_seed[4]; /* hash seed */
     struct buffer_head *s_sbh; /* superblock buffer_head */
     struct XCraft_superblock* s_super; /* superblock */
     struct buffer_head**s_group_desc;//指向组描述符数组的块的指针
@@ -187,15 +201,15 @@ struct XCraft_superblock_info{
 
 struct XCraft_hash_info
 {
-    __u32 hash;//存储函数计算出来的hash值
-    __u32 hash_version;//hash版本
-    __u32 *seed;//Hash种子数组
+    __u32 hash; //存储函数计算出来的hash值
+    __u32 hash_version; //hash版本
+    __u32 *seed; //Hash种子数组
 };
 
-struct XCraft_frame
+struct dx_frame
 {
     struct buffer_head *bh;//dx_entry所在磁盘块
-    struct dx_entry *entri0es;//同一级的dx_entry
+    struct dx_entry *entries;//同一级的dx_entry
     struct dx_entry *at;//最终的dx_entry
 };
 
