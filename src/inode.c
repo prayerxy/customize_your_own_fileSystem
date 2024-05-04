@@ -268,14 +268,18 @@ static struct dx_frame *
 dx_probe(struct qstr *entry, struct inode *dir,
 	 struct XCraft_hash_info *hinfo, struct dx_frame *frame_in, int *err)
 {	
-	struct dx_entry *at, *entries;
+	struct dx_entry *at, *entries, *p, *q, *m;
 	struct dx_root *root;
+	struct dx_node *node;
 	struct buffer_head *bh;
 	struct dx_frame *frame = frame_in;
 	struct super_block *sb = dir->i_sb;
-	u32 hash;
+	__u32 hash;
 	unsigned int i_block;
-	unsigned indirect, count;
+	unsigned indirect;
+	uint16_t count, limit;
+	// 确定循环的时候当时位于第几级，用于获取limit和count字段
+	int level = 0;
 
 	frame->bh = NULL;
 
@@ -285,7 +289,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	bh = sb_bread(sb, i_block);
 	if(!bh){
 		*err = -EIO;
-		return NULL;
+		goto fail;
 	}
 
 	root = (struct dx_root *) bh->b_data;
@@ -297,9 +301,10 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	hash = hinfo->hash;
 
 	// 由indirect_levels字段可以判断我们的哈希树有几级
-	// indirect字段如果大于1不合理，只有dx_root和dx_node两级
+	// 我们需要通过其与我们自己定义的哈希树层级进行比较
+	// indirect字段如果大于1不合理，
 	indirect = root->info.indirect_levels;
-	if(indirect > 1){
+	if(indirect >= XCRAFT_HTREE_LEVEL){
 		brelse(bh);
 		*err = ERR_BAD_DX_DIR;
 		goto fail;
@@ -316,14 +321,67 @@ dx_probe(struct qstr *entry, struct inode *dir,
 
 	// 开始寻找目录项
 	while(1){
-		count = root->info.count;
-		if(!count || count > root->info.limit){
+		// dx_entry的数目获取
+		if(!level){ // dx_root
+			count = le16_to_cpu(root->info.count);
+			limit = le16_to_cpu(root->info.limit);
+			
+		}
+		else{ // dx_node
+			node = (struct dx_node *) bh->b_data;
+			count = le16_to_cpu(node->count);
+			limit = le16_to_cpu(node->limit);
+		}
+
+		
+		if(!count || count > limit){
+			brelse(bh);
+			*err = ERR_BAD_DX_DIR;
+			goto fail2;
+		}
+		
+		// 二分查找目录项根据哈希值
+		p = entries + 1;
+		q = entries + count - 1;
+		while(p <= q){
+			m = p + (q - p) / 2;
+			if(hash < le32_to_cpu(m->hash)){
+				q = m - 1;
+			}else
+				p = m + 1;
+		}
+		// 确定位置
+		at = p - 1;
+		// 填充此一级frame字段
+		frame->bh = bh;
+		frame->entries = entries;
+		frame->at = at;
+		frame->limit = limit;
+		frame->count = count;
+
+		// indirect为0，说明此时并没有dx_node
+		// indirct为0时到达极限
+		if(!indirect--)
+			return frame;
+		bh = sb_bread(sb, dx_get_block(at));
+		if(!bh){
+			*err = -EIO;
+			goto fail2;
+		}
+
+		at = entries = ((struct dx_node *) bh->b_data)->entries;
+
+		// 判断limit字段是否一致
+		if(le16_to_cpu(entries->limit) != dx_node_limit()){
 			brelse(bh);
 			*err = ERR_BAD_DX_DIR;
 			goto fail2;
 		}
 
-
+		// 开始获取下一级的
+		frame++;
+		frame->bh = NULL;
+		level++;
 	}
 
 fail2:
@@ -332,29 +390,108 @@ fail2:
 		frame--;
 	}
 
-	
 fail:
 	return NULL;
 }
 
 // hash tree添加目录项
 static int XCraft_dx_add_entry(struct dentry *dentry, struct inode *inode){
-	struct dx_frame frames[2], *frame;
+	struct dx_frame frames[XCRAFT_HTREE_LEVEL], *frame;
 	struct dx_entry *entries, *at;
 	struct XCraft_hash_info hinfo;
-	struct buffer_head * bh;
+	struct buffer_head *bh, *bh2;
 	struct inode *dir = dentry->d_parent->d_inode;
 	struct super_block * sb = dir->i_sb;
 	struct XCraft_dir_entry *de;
-	int err;
+
+	struct dx_root * root;
+	struct dx_node * node;
+	int err = 0;
+	// 哈希树有几级 0 and 1
+	int levels;
+
+	// 提取里面的limit字段和count字段进行存储
+	uint16_t limit;
+	uint16_t count;
 
 	frame = dx_probe(&dentry->d_name, dir, &hinfo, frames, &err);
+	// 获取失败
+	if(!frame)
+		return err;
+	
+	// 获取最底层对应的块
+	entries = frame->entries;
+	at = frame->at;
+
+	// 获取下一级对应的磁盘块
+	bh = sb_bread(sb, dx_get_block(at));
+	if(!bh){
+		err = -EIO;
+		goto cleanup;
+	}
+
+	// 尝试插入目录项
+	err = add_dirent_to_buf(dentry, inode, NULL, bh);
+	if(err != -ENOSPC){
+		bh = NULL;
+		goto cleanup;
+	}
+
+	// 获取哈希树级数
+	levels = frame - frames;
+
+	// 需要分裂
+	// 首先检查dx_entry等是否需要分裂
+
+	// 获取最底层的limit和count字段
+	// 首先依据levels获取到底是dx_root中的字段还是dx_node中的字段
+	if(levels){
+		node = (struct dx_node *) frame->bh->b_data;
+		limit = le16_to_cpu(node->limit);
+		count = le16_to_cpu(node->count);
+	}
+	else {
+		root = (struct dx_root *) frame->bh->b_data;
+		limit = le16_to_cpu(root->info.limit);
+		count = le16_to_cpu(root->info.count);
+	}
+
+	if(limit == count){
+		// 此时需要分裂了，分配一个新块
+		uint32_t newblock;
+		// 如果此时已经是两层哈希树，dx_node已经超了，还要判断dx_root是否超了
+		unsigned rcount, rlimit;
+		root = (struct dx_root *) frames->bh->b_data;
+		rcount = le16_to_cpu(root->info.count);
+		rlimit = le16_to_cpu(root->info.limit);
+
+		if(levels && rcount == rlimit){
+			// dx_root层此时已经撑不住了
+			printk("dx_root is full in XCraft_dx_add_entry\n");
+			err = -ENOSPC;
+			goto cleanup;
+		}
+
+		// dx_root层还可以添加dx_entry
+
+
+
+
+	}
+
+
+
+
 
 	
 
 
 
-	return 0;
+cleanup:
+	if(bh)
+		brelse(bh);
+	dx_release(frames);
+	return err;
 }
 
 // 提交目录项

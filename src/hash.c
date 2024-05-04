@@ -43,6 +43,13 @@ static inline uint32_t dx_root_limit(void)
 	return limit;
 }
 
+// 减去dx_node中的前两个字段即可
+static inline uint32_t dx_node_limit(void)
+{
+	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(__le16)*2) / sizeof(struct dx_entry);
+	return limit;
+}
+
 
 static void dx_release(struct dx_frame *frames)
 {
