@@ -153,21 +153,36 @@ struct dx_root{
     struct dx_root_info{
    __u8 hash_version; /* hash version */
    __u8 indirect_levels; /* 0 if no dx_node else 1 */
-   __le16 limit;//最大目录项数 header + entries
-   __le16 count;//目录项数  header + entries
+//    __le16 limit;//最大目录项数 header + entries
+//    __le16 count;//目录项数  header + entries
     }info;
     struct dx_entry entries[]; /* entries 一个块后面全部是dx_entry */
 };
 
+//这个存在entries[0]的hash中
+struct dx_countlimit
+{
+	__le16 limit;
+	__le16 count;
+};
 struct dx_node
 {
     //对于 u8 类型的数据，字节序转换是不必要的。
     //其他数据要转换 le16_to_cpu
-    __le16 limit; /* limit */
-    __le16 count; /* count */
+    // __le16 limit; /* limit */
+    // __le16 count; /* count */
     struct dx_entry entries[]; /* entries */
 };
 
+#define ASSERT(assert)						\
+do {									\
+	if (unlikely(!(assert))) {					\
+		printk(KERN_EMERG					\
+		       "Assertion failure in %s() at %s:%d: '%s'\n",	\
+		       __func__, __FILE__, __LINE__, #assert);		\
+		BUG();							\
+	}								\
+} while (0)
 
 #ifdef __KERNEL__
 struct XCraft_inode_info{
