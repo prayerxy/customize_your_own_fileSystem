@@ -224,8 +224,6 @@ struct XCraft_hash_info
 
 struct dx_frame
 {
-    uint16_t limit;
-    uint16_t count;
     struct buffer_head *bh;//dx_entry所在磁盘块
     struct dx_entry *entries;//同一级的dx_entry
     struct dx_entry *at;//最终的dx_entry
