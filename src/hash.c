@@ -151,6 +151,89 @@ static void dx_sort_map (struct dx_map_entry *map, unsigned count){
 
 }
 
+
+// 在bh对应的磁盘块中插入目录项
+// de记录最后的目录项位置, bh为插入该目录项所在的磁盘块缓冲区
+// de 一般传入null，不是null就表明已经是找到了目录项
+static int add_dirent_to_buf(struct dentry *dentry,
+			     struct inode *inode, struct XCraft_dir_entry *de,
+			     struct buffer_head * bh)
+{
+	struct inode *dir = dentry->d_parent->d_inode;
+	struct super_block *sb = dir->i_sb;
+	const char	*name = dentry->d_name.name;
+	int	namelen = dentry->d_name.len;
+	// 最终目录项所在的磁盘块中的偏移量
+	unsigned long offset = 0;
+	// 一个目录项大小
+	unsigned short reclen;
+	char *top;
+	int count = 0;
+
+	reclen = sizeof(struct XCraft_dir_entry);
+	if(!de){
+		de = (struct XCraft_dir_entry *)bh->b_data;
+		// 锁定最大能插入的位置
+		top = bh->b_data + sb->s_blocksize - reclen;
+		
+		// 循环遍历
+		while((char *)de <= top && count<=XCRAFT_dentry_LIMIT){
+			// 检查是否已经存在该目录项
+			// 比较是否有同名现象
+			if(strncmp(de->name,name,namelen) == 0)
+				brelse(bh);
+				return -EEXIST;
+
+			// 跳出条件为找到一个目录项的inode号为0，此目录项可用
+			if(!de->inode)
+				break;
+			reclen = le16_to_cpu(de->rec_len);
+			// 移动到下一个目录项
+			de = (struct XCraft_dir_entry*)((char *)de + reclen);
+			// 更新offset
+			offset += reclen;
+			count++;
+		}
+
+		// 超了
+		if(count>XCRAFT_dentry_LIMIT || (char *)de > top)
+			return -ENOSPC;
+	}
+
+	// 对找到的de进行更新
+	// 传进来的inode必须是有效的
+	if (inode){
+		de->inode = cpu_to_le32(inode->i_ino);
+		reclen = sizeof(struct XCraft_dir_entry);
+		de->rec_len = cpu_to_le16(reclen);
+		// 依据i_mode字段对file_type进行赋值
+		if(S_ISDIR(inode->i_mode))
+			de->file_type = XCRAFT_FT_DIR;
+		else if(S_ISREG(inode->i_mode))
+			de->file_type = XCRAFT_FT_REG_FILE;
+		else if(S_ISLNK(inode->i_mode))	
+			de->file_type = XCRAFT_FT_LINK;
+		memcpy(de->name, name, namelen);
+		// 最后一个字符置为空字符
+		de->name[namelen] = '\0';
+		if(namelen>XCRAFT_NAME_LEN){
+			printk("add_dirent_to_buf: name too long\n");
+			de->name[XCRAFT_NAME_LEN] = '\0';
+			namelen = XCRAFT_NAME_LEN;
+			dentry->d_name.len = namelen;
+		}
+		de->name_len = namelen;
+	}
+
+	// dir访问时间更新
+	dir->i_atime = dir->i_mtime = dir->i_ctime = current_time(dir);
+	mark_inode_dirty(dir);
+	// 更新bh
+	mark_buffer_dirty(bh);
+	brelse(bh);
+	return 0;
+}
+
 // hash tree to build
 // handle:事务 qstr:文件名 dir:目录 inode:文件 bh:缓冲区头
 // 在dir下建一个dir_entry   inode是我们目录项索引的文件

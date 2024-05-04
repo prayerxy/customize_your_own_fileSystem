@@ -147,7 +147,6 @@ struct dx_entry{
 
 //占据一个块
 #define XCRAFT_HTREE_VERSION 6
-#define XCRAFT_HTREE_VERSION 6
 struct dx_root{
     //对于 u8 类型的数据，字节序转换是不必要的。
     //其他数据要转换 le16_to_cpu

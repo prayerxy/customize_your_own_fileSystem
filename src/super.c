@@ -67,8 +67,10 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     uint32_t s_inodes_count = le32_to_cpu(disk_sb->s_inodes_count);
 
     uint16_t inode_size;
-    uint32_t blocks_per_group; 
+    uint32_t blocks_per_group;
+    uint32_t inode_block_begin, inode_block, inode_shift_in_block;
 
+    struct XCraft_group_desc* desc = NULL;
     int i=0;
     if (ino >= s_inodes_count)
         return 0;
@@ -78,11 +80,13 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     // get blocks_per_group
     blocks_per_group = le32_to_cpu(disk_sb->s_blocks_per_group);
 
-    // get inode_block
-    uint32_t inode_block_begin = (1 + XCRAFT_DESC_LIMIT_blo) + inode_group * blocks_per_group + 2;
-    uint32_t inode_block = inode_block_begin + inode_shift_in_group / XCRAFT_INODES_PER_BLOCK;
-    uint32_t inode_shift_in_block = inode_shift_in_group % XCRAFT_INODES_PER_BLOCK;
+    // 获取inode_block_begin
+    desc = get_group_desc2(sb_info, inode_group);
+    inode_block_begin = desc->bg_inode_table;
+    inode_block = inode_block_begin + inode_shift_in_group / XCRAFT_INODES_PER_BLOCK;
+    inode_shift_in_block = inode_shift_in_group % XCRAFT_INODES_PER_BLOCK;
 
+    
     bh = sb_bread(sb, inode_block);
     if(!bh)
         return -EIO;
