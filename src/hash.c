@@ -43,6 +43,24 @@ static inline uint32_t dx_root_limit(void)
 	return limit;
 }
 
+static inline void dx_set_count(struct dx_entry *entries, unsigned value)
+{
+	((struct dx_countlimit *) entries)->count = cpu_to_le16(value);
+}
+static inline void dx_set_limit(struct dx_entry *entries, unsigned value)
+{
+	((struct dx_countlimit *) entries)->limit = cpu_to_le16(value);
+}
+static inline unsigned dx_get_count(struct dx_entry *entries)
+{
+	return le16_to_cpu(((struct dx_countlimit *) entries)->count);
+}
+
+static inline unsigned dx_get_limit(struct dx_entry *entries)
+{
+	return le16_to_cpu(((struct dx_countlimit *) entries)->limit);
+}
+
 
 static void dx_release(struct dx_frame *frames)
 {
@@ -96,7 +114,7 @@ static int dx_make_map(struct inode*dir,struct buffer_head*bh,struct XCraft_hash
 			XCraft_dirhash(de->name,de->name_len,h);
 			map_tail--;
 			map_tail->hash=h->hash;
-			map_tail->offs=(u16)((char*)de-base);
+			map_tail->offs=((char*)de-base)>>2;
 			map_tail->size=le16_to_cpu(de->rec_len);
 			count++;
 			//存疑
@@ -151,6 +169,71 @@ static void dx_sort_map (struct dx_map_entry *map, unsigned count){
 
 }
 
+/*
+* 利用to下面的map_entry，找到from中对应的目录项，然后移动到to中，最后返回的是to中最大的目录项
+*/
+static struct XCraft_dir_entry*
+dx_move_dirents(struct inode *dir, char *from, char *to,
+		struct dx_map_entry *map, int count,
+		unsigned blocksize)
+{
+	unsigned rec_len=0;
+	while(count--){
+		//找到与to里面对应的from的目录项
+		struct XCraft_dir_entry *de=(struct XCraft_dir_entry*)(from+(map->offs<<2));
+		rec_len=le16_to_cpu(de->rec_len);
+
+		memcpy(to,de,rec_len);
+		//除了rec_len的部分，其他部分清零
+		de->inode=0;
+		memset(&de->name_len,0,rec_len-offsetof(struct XCraft_dir_entry,name_len));
+		//更新map
+		map++;
+		to+=rec_len;
+	}
+	return (struct XCraft_dir_entry*)(to-rec_len);
+}
+
+
+/*清理base中的无用目录项，使其变得紧凑
+* 返回最后一个entry
+*/
+
+static struct XCraft_dir_entry *dx_pack_dirents(struct inode *dir, char *base, unsigned blocksize)
+{
+	struct XCraft_dir_entry *next, *to, *prev, *de = (struct XCraft_dir_entry *) base;
+	unsigned rec_len=0;
+	prev=to=de;
+
+	while((char*)de<base+blocksize){
+		next = (struct XCraft_dir_entry*)((char*)de + le16_to_cpu(de->rec_len));
+		if(de->inode&&de->name_len){
+			rec_len=le16_to_cpu(de->rec_len);
+			if(de>to)
+				memmove(to,de,rec_len);
+			prev=to;
+			to=(struct XCraft_dir_entry*)((char*)to+rec_len);
+		}
+		de=next;
+	}
+	return prev;
+}
+
+static void dx_insert_block(struct dx_frame frame,uint32_t hash,uint32_t bno)
+{
+	struct dx_entry*entries=frame->entries;
+	struct dx_entry*old=frame->at;
+	struct dx_entry*new=old+1;//新位置  上一级的dx_entry  建立index
+	int count=dx_get_count(entries);
+	ASSERT(count < dx_get_limit(entries));//现在新加1个，所以count<limit
+	ASSERT(old<entries+count);
+	//找到插入的位置 把old后面的entry往后移动
+	memmove(new+1,new,(char*)(entries+count)-(char*)new);
+	dx_set_hash(new,hash);
+	dx_set_block(new,bno);
+	dx_set_count(entries, count + 1);
+
+}
 
 // 在bh对应的磁盘块中插入目录项
 // de记录最后的目录项位置, bh为插入该目录项所在的磁盘块缓冲区
@@ -260,6 +343,7 @@ static int XCraft_make_hash_tree(const struct qstr *qstr,
 	struct XCraft_dir_entry*de;
 	struct XCraft_hash_info *hinfo;
 	uint32_t bno;
+	int retval;
 
 
 	printk(KERN_DEBUG "Creating index: inode %lu\n", dir->i_ino);
@@ -278,11 +362,13 @@ static int XCraft_make_hash_tree(const struct qstr *qstr,
 	/*更新root*/
 	memset((char*)root,0x00,XCRAFT_BLOCK_SIZE);
 	root->info.hash_version=(uint8_t)XCRAFT_HTREE_VERSION;
-	root->info.count=cpu_to_le16(1);//目录项数目
+	// root->info.count=cpu_to_le16(1);//目录项数目
 	root->info.indirect_levels=0;
-	root->info.limit=cpu_to_le16(dx_root_limit());
+	// root->info.limit=cpu_to_le16(dx_root_limit());
 	entries=root->entries;
 	dx_set_block(entries,bno);//bno是物理块号
+	dx_set_count(entries,1);
+	dx_set_limit(entries,dx_root_limit());
 
 
 	memset(frames, 0, sizeof(frames));
@@ -294,15 +380,19 @@ static int XCraft_make_hash_tree(const struct qstr *qstr,
 	XCraft_dirhash(qstr->name,qstr->len,hinfo);
 	//将bh2分裂 bh2最后是两个块中应该插入新目录项的块
 	de=do_split(dir,&bh2,frame,hinfo);
-
+	if(!de){
+		retval=-ENOMEM;
+		goto out_frames;
+	}
 	//将新目录项插入到目录中
-	add_dirent_to_buf(dentry,inode,de,bh2);
+	retval = add_dirent_to_buf(dentry,inode,de,bh2);
 
 
 
 
 out_frames:
-	mark_inode_dirty(dir);
+	if(retval)
+		mark_inode_dirty(dir);
 	mark_buffer_dirty(bh);
 	mark_buffer_dirty(bh2);
 	dx_release(frames);
@@ -318,12 +408,14 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 			struct XCraft_hash_info *hinfo)
 {
     unsigned blocksize =XCRAFT_BLOCK_SIZE;
+	unsigned continued;
 	uint32_t bno;
 	uint32_t hash2;
 	struct buffer_head *bh2;
 	char*data1=(*bh)->b_data,*data2;
 	struct dx_map_entry *map;
 	unsigned split, move, size;
+	struct ext4_dir_entry_2 *de = NULL, *de2;
 	int count;
 	int i;
 
@@ -364,5 +456,21 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 		split = count - move;
 	else
 		split = count/2;
+	//split从1开始是个数 map指向第0个
 	hash2=map[split].hash;
+	continued = hash2 == map[split - 1].hash;
+	printk("Split block%lu at %x, %i/%i\n", 
+			(unsigned long)dx_get_block(frame->at),hash2,split, count-split);
+	/*如果split块和split-1的Hash相同，那么split与split-1要在一个块中，所以加上continued*/
+	de2=dx_move_dirents(dir,data1,data2,map+split+continued,count-split,blocksize);
+	de=dx_pack_dirents(dir,data1,blocksize);
+	if(hinfo->hash>=hash2){
+		swap(*bh,bh2);
+		de=de2;//bh,de始终是要新加目录项的那一个块的信息
+	}
+	dx_insert_block(frame,hash2+continued,bno);
+	return de;
+	
+
+	brelse(bh2);
 }

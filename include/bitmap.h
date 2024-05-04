@@ -51,13 +51,13 @@ static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_inf
     uint32_t s_groups_count=sbi->s_groups_count;
     uint32_t s_desc_per_block=sbi->s_desc_per_block;
     uint32_t s_gdb_count=sbi->s_gdb_count;//gdb占用的块数
-    desc=(struct XCraft_group_desc *)bh->b_data;
     int flag=0;
     int ret=0;
     if(s_La_init_group+1>=s_groups_count){
         printk("No more group descriptor block\n");
         return NULL;
     }
+    desc=(struct XCraft_group_desc *)bh->b_data;
     //说明前一个块组是常规块组
     if(s_La_init_group+1<s_desc_per_block){
         if(!XCraft_BG_ISINIT(le16_to_cpu(desc[s_La_init_group].bg_flags))){
