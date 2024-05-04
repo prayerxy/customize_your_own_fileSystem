@@ -296,6 +296,7 @@ static int XCraft_make_hash_tree(const struct qstr *qstr,
 	de=do_split(dir,&bh2,frame,hinfo);
 
 	//将新目录项插入到目录中
+	add_dirent_to_buf(dentry,inode,de,bh2);
 
 
 

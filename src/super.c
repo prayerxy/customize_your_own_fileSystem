@@ -82,7 +82,7 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
 
     // 获取inode_block_begin
     desc = get_group_desc2(sb_info, inode_group);
-    inode_block_begin = desc->bg_inode_table;
+    inode_block_begin = le32_to_cpu(desc->bg_inode_table);
     inode_block = inode_block_begin + inode_shift_in_group / XCRAFT_INODES_PER_BLOCK;
     inode_shift_in_block = inode_shift_in_group % XCRAFT_INODES_PER_BLOCK;
 
