@@ -8,6 +8,12 @@ int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo){
     return 0;
 }
 
+static inline uint32_t dx_node_limit(void)
+{
+	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(__le16))  / sizeof(struct dx_entry);
+	return limit;
+}
+
 static inline void dx_set_block(struct dx_entry *entry, uint32_t value)
 {
 	entry->block = cpu_to_le32(value);
@@ -63,7 +69,7 @@ static int add_dirent_to_buf(struct dentry *dentry,
 
 
 
-static int XCraft_make_hash_tree(const struct qstr *qstr,
+static int XCraft_make_hash_tree(struct dentry *dentry,
 			    struct inode *dir,
 			    struct inode *inode, struct buffer_head *bh);
 

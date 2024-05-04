@@ -12,12 +12,7 @@
 
 
 
-// 减去dx_node中的前两个字段即可
-static inline uint32_t dx_node_limit(void)
-{
-	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(__le16)*2) / sizeof(struct dx_entry);
-	return limit;
-}
+
 
 
 static void dx_release(struct dx_frame *frames)
@@ -177,7 +172,7 @@ static struct XCraft_dir_entry *dx_pack_dirents(struct inode *dir, char *base, u
 	return prev;
 }
 
-static void dx_insert_block(struct dx_frame frame,uint32_t hash,uint32_t bno)
+static void dx_insert_block(struct dx_frame *frame,uint32_t hash,uint32_t bno)
 {
 	struct dx_entry*entries=frame->entries;
 	struct dx_entry*old=frame->at;
@@ -285,7 +280,7 @@ static int add_dirent_to_buf(struct dentry *dentry,
  * This converts a one block unindexed directory to a 3 block indexed
  * directory, and adds the dentry to the indexed directory.
  */
-static int XCraft_make_hash_tree(const struct qstr *qstr,
+static int XCraft_make_hash_tree(struct dentry *dentry,
 			    struct inode *dir,
 			    struct inode *inode, struct buffer_head *bh)
 {
@@ -300,6 +295,8 @@ static int XCraft_make_hash_tree(const struct qstr *qstr,
 	struct buffer_head *bh2;
 	struct XCraft_dir_entry*de;
 	struct XCraft_hash_info *hinfo;
+
+	struct qstr *qstr = &dentry->d_name;
 	uint32_t bno;
 	int retval;
 
@@ -373,7 +370,7 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 	char*data1=(*bh)->b_data,*data2;
 	struct dx_map_entry *map;
 	unsigned split, move, size;
-	struct ext4_dir_entry_2 *de = NULL, *de2;
+	struct XCraft_dir_entry *de = NULL, *de2;
 	int count;
 	int i;
 
@@ -427,8 +424,6 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 		de=de2;//bh,de始终是要新加目录项的那一个块的信息
 	}
 	dx_insert_block(frame,hash2+continued,bno);
-	return de;
-	
-
 	brelse(bh2);
+	return de;
 }

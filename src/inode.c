@@ -279,7 +279,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	unsigned indirect;
 	uint16_t count, limit;
 	// 确定循环的时候当时位于第几级，用于获取limit和count字段
-	int level = 0;
+	int level;
 
 	frame->bh = NULL;
 
@@ -313,27 +313,19 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	entries = (struct dx_entry *) (((char *)&root->info) + sizeof(root->info));
 
 	// 比较limit字段
-	if(root->info.limit != dx_root_limit()){
+	if(dx_get_limit(entries) != dx_root_limit()){
 		brelse(bh);
 		*err = ERR_BAD_DX_DIR;
 		goto fail;
 	}
 
+	level = 0;
 	// 开始寻找目录项
 	while(1){
-		// dx_entry的数目获取
-		if(!level){ // dx_root
-			count = le16_to_cpu(root->info.count);
-			limit = le16_to_cpu(root->info.limit);
-			
-		}
-		else{ // dx_node
-			node = (struct dx_node *) bh->b_data;
-			count = le16_to_cpu(node->count);
-			limit = le16_to_cpu(node->limit);
-		}
+		// count 和 limit 字段获取
+		count = dx_get_count(entries);
+		limit = dx_get_limit(entries);
 
-		
 		if(!count || count > limit){
 			brelse(bh);
 			*err = ERR_BAD_DX_DIR;
@@ -356,12 +348,10 @@ dx_probe(struct qstr *entry, struct inode *dir,
 		frame->bh = bh;
 		frame->entries = entries;
 		frame->at = at;
-		frame->limit = limit;
-		frame->count = count;
 
 		// indirect为0，说明此时并没有dx_node
 		// indirct为0时到达极限
-		if(!indirect--)
+		if(++level > indirect)
 			return frame;
 		bh = sb_bread(sb, dx_get_block(at));
 		if(!bh){
@@ -372,7 +362,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 		at = entries = ((struct dx_node *) bh->b_data)->entries;
 
 		// 判断limit字段是否一致
-		if(le16_to_cpu(entries->limit) != dx_node_limit()){
+		if(dx_get_limit(entries) != dx_node_limit()){
 			brelse(bh);
 			*err = ERR_BAD_DX_DIR;
 			goto fail2;
@@ -404,20 +394,29 @@ static int XCraft_dx_add_entry(struct dentry *dentry, struct inode *inode){
 	struct super_block * sb = dir->i_sb;
 	struct XCraft_dir_entry *de;
 
-	struct dx_root * root;
-	struct dx_node * node;
+	struct dx_root *root;
+	// 后续需要分裂的dx_entry等所在的块用到
+	struct dx_node *node2;
+	struct dx_entry *entries2;
+
 	int err = 0;
-	// 哈希树有几级 0 and 1
+	// 哈希树有几级 之后与宏定义的hash tree层数比较
 	int levels;
 
-	// 提取里面的limit字段和count字段进行存储
-	uint16_t limit;
-	uint16_t count;
+	unsigned int icount, icount1, icount2;
+	uint32_t hash2;
+	uint32_t newblock;
 
+	// restart字段是如果中间我们当前的级数需要增加，
+	// 当我们级数增加后，我们需要重新开始执行dx_entry的分裂过程
+	int restart;
+
+again:
+	restart = 0;
 	frame = dx_probe(&dentry->d_name, dir, &hinfo, frames, &err);
 	// 获取失败
-	if(!frame)
-		return err;
+	if(IS_ERR(frame))
+		return PTR_ERR(frame);
 	
 	// 获取最底层对应的块
 	entries = frame->entries;
@@ -425,72 +424,123 @@ static int XCraft_dx_add_entry(struct dentry *dentry, struct inode *inode){
 
 	// 获取下一级对应的磁盘块
 	bh = sb_bread(sb, dx_get_block(at));
-	if(!bh){
-		err = -EIO;
+	if(IS_ERR(bh)){
+		err = PRT_ERR(bh);
+		bh = NULL;
 		goto cleanup;
 	}
 
 	// 尝试插入目录项
 	err = add_dirent_to_buf(dentry, inode, NULL, bh);
-	if(err != -ENOSPC){
-		bh = NULL;
+	if(err != -ENOSPC)
 		goto cleanup;
-	}
 
-	// 获取哈希树级数
-	levels = frame - frames;
 
-	// 需要分裂
-	// 首先检查dx_entry等是否需要分裂
+	// 初始化为err
+	// 此时肯定需要分裂
+	err = 0;
 
-	// 获取最底层的limit和count字段
-	// 首先依据levels获取到底是dx_root中的字段还是dx_node中的字段
-	if(levels){
-		node = (struct dx_node *) frame->bh->b_data;
-		limit = le16_to_cpu(node->limit);
-		count = le16_to_cpu(node->count);
-	}
-	else {
-		root = (struct dx_root *) frame->bh->b_data;
-		limit = le16_to_cpu(root->info.limit);
-		count = le16_to_cpu(root->info.count);
-	}
+	// need split index or not
+	if(dx_get_count(entries) == dx_get_limit(entries)){
+		// 初始化是否需要加级
+		int add_level = 1;
+		levels = frame - frames + 1;
+		// 需要在前面加入dx_entry
 
-	if(limit == count){
-		// 此时需要分裂了，分配一个新块
-		uint32_t newblock;
-		// 如果此时已经是两层哈希树，dx_node已经超了，还要判断dx_root是否超了
-		unsigned rcount, rlimit;
-		root = (struct dx_root *) frames->bh->b_data;
-		rcount = le16_to_cpu(root->info.count);
-		rlimit = le16_to_cpu(root->info.limit);
+		// 寻找最早需要分裂的层数
+		while(frame > frames){
+			// 检查其上一层的是否需要分裂
+			if(dx_get_count((frame - 1)->entries) < dx_get_limit((frame - 1)->entries)){
+				// 此时已经找到位置了
+				add_level = 0;
+				break;
+			}
+			frame--;
+			at = frame->at;
+			entries = frame->entries;
+		}
 
-		if(levels && rcount == rlimit){
-			// dx_root层此时已经撑不住了
-			printk("dx_root is full in XCraft_dx_add_entry\n");
+		// 判断现在的级数是否到达了上限
+		if(add_level && levels == XCRAFT_HTREE_LEVEL){
+			// 此时级数已经满了，不能加级
+			printk("XCraft_dx_add_entry: too many levels\n");
 			err = -ENOSPC;
 			goto cleanup;
 		}
 
-		// dx_root层还可以添加dx_entry
+		icount = dx_get_count(entries);
+		
+		// 分配分裂需要的新块
+		bh2 = XCraft_append(dir, &newblock);
+		if(IS_ERR(bh2)){
+			err = PTR_ERR(bh2);
+			goto cleanup;
+		}
+		node2 = (struct dx_node *)(bh2->b_data);
+		entries2 = node2->entries;
+		node2->fake = 0;
 
+		// 两种情况:
+		// 需要加级数 不需要加级数
+		// 不需要加级数的直接在前一层插入dx_entry
+		
+		if(!add_level){
+			icount1 = icount/2, icount2 = icount - icount1;
+			// 分裂位置的hash
+			hash2 = dx_get_hash(entries + icount1);
+			memcpy((char *) entries2, (char *)(entries + icount1), sizeof(struct dx_entry) * icount2);
+			dx_set_count(entries, icount1);
+			dx_set_count(entries2, icount2);
+			dx_set_limit(entries2, dx_node_limit());
 
+			// 确定哪个block会添加我们的目录项
+			// 用来更新我们的frame
+			if(at - entries >= icount1){
+				frame->at = entries2 + (at - entries) - icount1;
+				frame->entries = entries = entries2;
+				swap(frame->bh, bh2);
+			}
 
+			dx_insert_block((frame - 1), hash2, newblock);
+			// 此时我们需要mark_buffer_dirty，分裂的两个块，添加dx_entry的块
+			mark_buffer_dirty(frame->bh);
+			mark_buffer_dirty((frame - 1)->bh);
+			mark_buffer_dirty(bh2);
+			brelse(bh2);
+		}
+		else{
+			// 需要添加级数
+			memcpy((char *) entries2, (char *) entries, icount * sizeof(struct dx_entry));
+			
+			dx_set_limit(entries2, dx_node_limit());
 
+			// 对dx_root进行重新修改赋值
+			dx_set_count(entries, 1);
+			dx_set_block(entries, newblock);
+			
+			root = (struct dx_root *) frames[0].bh->b_data;;
+			// 级数增加
+			root->info.indirect_levels += 1;
+			// mark_buffer_dirty
+			// 修改了dx_root，新分配的newblock
+			mark_buffer_dirty(frame->bh);
+			mark_buffer_dirty(bh2);
+			brelse(bh2);
+			restart = 1;
+			goto cleanup;
+		}
 	}
 
-
-
-
-
-	
-
-
+	// dx_entry的分裂已经完成
+	de = do_split(dir, &bh, frame, &hinfo);
+	if(IS_ERR(de))
+		err = PTR_ERR(de);
 
 cleanup:
-	if(bh)
-		brelse(bh);
+	brelse(bh);
 	dx_release(frames);
+	if(restart && err == 0)
+		goto again;
 	return err;
 }
 
@@ -540,7 +590,7 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode){
 		printk("same name of dentry has been existed\n");
 	else if(retval == -ENOSPC)
 		// 开始建立哈希树
-		retval = XCraft_make_hash_tree(&dentry->d_name, dir, inode, bh);
+		retval = XCraft_make_hash_tree(dentry, dir, inode, bh);
 	
 put_bh:
 	brelse(bh);
@@ -554,12 +604,72 @@ end:
 // buffer_head为找到此目录项所在块的buffer_head
 // err是存储的返回的错误信息
 static struct buffer_head * XCraft_dx_find_entry(struct inode *dir,
-			struct qstr *entry, struct XCraft_dir_entry **res_dir,
-			int *err)
+			struct qstr *entry, struct XCraft_dir_entry **res_dir)
 {
+	struct super_block *sb = dir->i_sb;
+	struct XCraft_hash_info hinfo;
 
+	struct dx_frame frames[XCRAFT_HTREE_LEVEL], *frame;
+	struct buffer_head *bh, *ret;
 
-	return NULL;
+	int err;
+	uint32_t block;
+
+	// 文件名长度
+	int namelen;
+	namelen = entry->len;
+
+	// 文件名
+	char *name = entry->name;
+	if(namelen > XCRAFT_NAME_LEN){
+		*res_dir = NULL;
+		ret = NULL;
+		goto out;
+	}
+
+	// 在磁盘块中寻找会用到
+	struct XCraft_dir_entry *de;
+	char *top;
+	unsigned short reclen;
+
+	// 首先由hash值获取frame
+	frame = dx_probe(entry, dir, &hinfo, frames, &err);
+	if(IS_ERR(frame)){
+		*res_dir = NULL;
+		ret = NULL;
+		goto out;
+	}
+	
+
+	block = dx_get_block(frame->at);
+	bh = sb_bread(sb, block);
+	if(!bh){
+		*res_dir = NULL;
+		ret = NULL;
+		goto out_frames;	
+	}
+
+	// 开始在block对应的磁盘块中进行搜索
+	de = (struct XCraft_dir_entry *) bh->b_data;
+	top = bh->b_data + sb->s_blocksize;
+	while((char *)de < top){
+		// 比较文件名是否匹配
+		if(strncmp(de->name, name, namelen) == 0){
+			*res_dir = de;
+			ret = bh;
+			goto out_frames;
+		}
+
+		reclen = le16_to_cpu(de->rec_len);
+		de = (struct XCraft_dir_entry *) ((char *)de + reclen);
+	}
+
+	// 没有发现，将*res_dir置为NULL
+	*res_dir = NULL;
+out_frames:
+	dx_release(frames);
+out:
+	return ret;
 }
 
 
@@ -567,16 +677,78 @@ static struct buffer_head * XCraft_dx_find_entry(struct inode *dir,
 // 搜索目录项，观察是否找到文件名对应的目录项
 // dir是目录inode, qstr中存储了文件名，res_dir是我们最终要返回的对应此文件名的目录项
 // buffer_head为找到此目录项所在块的buffer_head
+// 找到目录项后我们会将res_dir进行设置，没有找到就设置为NULL
+// 返回的buffer_head同理
 static struct buffer_head *XCraft_find_entry(struct inode *dir,
 					struct qstr *entry,
 					struct XCraft_dir_entry **res_dir)
 {
+	int err;
+	struct buffer_head *bh, *ret;
+	struct super_block *sb = dir->i_sb;
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
+	int namelen;
+	char *name = entry->name;
+	unsigned int i_block;
+
+	// 如果没有哈希树，此d_entry为我们的第一个块中的第一个目录项
+	struct XCraft_dir_entry *de;
+	char *top;
+
+	// 如果没有哈希树，用于遍历目录项使用
+	int count = 0;
+	unsigned short reclen;
+	// 检查文件名长度
+	namelen = entry->len;
+	if(namelen > XCRAFT_NAME_LEN)
+		return NULL;
+	
+	// 获取i_block[0]
+	i_block = dir_info->i_block[0];
+	if(XCraft_INODE_ISHASH_TREE(dir_info->i_flags)){
+		// 此时已经是哈希树
+		ret = XCraft_dx_find_entry(dir, entry, res_dir);
+		if (!IS_ERR(ret) || PTR_ERR(ret) != ERR_BAD_DX_DIR)
+			// 此时表示已经找到
+			goto cleanup_and_exit;
+		// 哈希树没有找到此目录项
+		ret = NULL;
+	}
+
+	// 遍历i_block
+	bh = sb_bread(sb, i_block);
+	if(!bh){
+		ret = NULL;
+		*res_dir = NULL;
+		goto cleanup_and_exit;
+	}
+
+	// 在此块中搜索目录项
+	de = (struct XCraft_dir_entry *) bh->b_data;
+	// 块底部极限位置
+	top = bh->b_data + sb->s_blocksize;
 
 
-	return NULL;
+	while((char *)de < top && count<=XCRAFT_dentry_LIMIT){
+		// 检查名字是否匹配
+		if(strncmp(de->name, name, namelen) == 0){
+			// 已经找到
+			*res_dir = de;
+			ret = bh;
+			goto cleanup_and_exit;
+		}
+
+		reclen = le16_to_cpu(de->rec_len);
+		de = (struct XCraft_dir_entry *) ((char *)de + reclen);
+		count++;
+	}
+
+	// 没有发现, 将*res_dir置为NULL
+	*res_dir = NULL;
+
+cleanup_and_exit:
+	return ret;
 }
-
-
 
 
 
@@ -744,6 +916,7 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry){
 
 
 
+
 	return 0;
 }
 
@@ -837,6 +1010,7 @@ static int XCraft_rmdir(struct inode *dir, struct dentry *dentry){
 }
 
 // rename
+// 
 #if MNT_IDMAP_REQUIRED()
 static int XCraft_rename(struct mnt_idmap *id,
                            struct inode *old_dir,
@@ -859,7 +1033,45 @@ static int XCraft_rename(struct inode *old_dir,
                            unsigned int flags)
 #endif
 {
+	struct super_block *sb = old_dir->i_sb;
+	struct XCraft_inode_info *new_dir_info = XCRAFT_I(new_dir);
+	// old_dentry中关联的inode和new_dentry中关联的inode
+	struct inode * old_inode, * new_inode;
 
+	// 由old_dentry找到的目录项结构
+	struct XCraft_dir_entry *old_de, *new_de;
+	// 后面使用find_entry作为结果返回
+	struct buffer_head *old_bh, *new_bh;
+
+	old_bh = new_bh = NULL;
+	old_de = new_de = NULL;
+
+	// 最终的返回字段
+	int retval;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    struct timespec64 cur_time;
+#endif
+
+	// 不支持的字段我们会失败
+	if (flags & (RENAME_EXCHANGE | RENAME_WHITEOUT))
+        return -EINVAL;
+
+	// 检查新文件名的长度
+	if(strlen(new_dentry->d_name.name) > XCRAFT_NAME_LEN)
+		return -ENAMETOOLONG;
+	
+	old_bh = XCraft_find_entry(old_dir,&old_dentry->d_name, &old_de);
+
+	old_inode = old_dentry->d_inode;
+	retval = -ENOENT;
+
+	// find_entry没找到，或者找到的inode的ino和old_inode的ino不一样
+	
+	
+
+
+	
 
 
 	return 0;

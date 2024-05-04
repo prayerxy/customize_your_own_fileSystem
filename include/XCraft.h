@@ -165,12 +165,14 @@ struct dx_countlimit
 	__le16 limit;
 	__le16 count;
 };
+
 struct dx_node
 {
     //对于 u8 类型的数据，字节序转换是不必要的。
     //其他数据要转换 le16_to_cpu
     // __le16 limit; /* limit */
-    // __le16 count; /* count */
+    // __le16 count; /* count */    
+    __le16 fake; /* fake */ // 赋值为0
     struct dx_entry entries[]; /* entries */
 };
 
