@@ -1,5 +1,3 @@
-
-
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -196,24 +194,27 @@ static int add_dirent_to_buf(struct dentry *dentry,
 			     struct buffer_head * bh)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
 	struct super_block *sb = dir->i_sb;
 	const char	*name = dentry->d_name.name;
 	int	namelen = dentry->d_name.len;
-	// 最终目录项所在的磁盘块中的偏移量
-	unsigned long offset = 0;
 	// 一个目录项大小
 	unsigned short reclen;
 	char *top;
 	int count = 0;
 
+	// 判断是否是哈希树
+	unsigned long flag;
+	flag = XCraft_INODE_ISHASH_TREE(dir_info->i_flags);
+	
 	reclen = sizeof(struct XCraft_dir_entry);
 	if(!de){
 		de = (struct XCraft_dir_entry *)bh->b_data;
 		// 锁定最大能插入的位置
 		top = bh->b_data + sb->s_blocksize - reclen;
-		
+
 		// 循环遍历
-		while((char *)de <= top && count<=XCRAFT_dentry_LIMIT){
+		while((char *)de <= top && count<XCRAFT_dentry_LIMIT){
 			// 检查是否已经存在该目录项
 			// 比较是否有同名现象
 			if(strncmp(de->name,name,namelen) == 0)
@@ -225,14 +226,14 @@ static int add_dirent_to_buf(struct dentry *dentry,
 				break;
 			reclen = le16_to_cpu(de->rec_len);
 			// 移动到下一个目录项
-			de = (struct XCraft_dir_entry*)((char *)de + reclen);
-			// 更新offset
-			offset += reclen;
-			count++;
+			de = (struct XCraft_dir_entry *)((char *)de + reclen);
+			// 不是哈希树时我们才受XCRAFT_dentry_LIMIT限制
+			if(!flag)
+				count++;
 		}
 
 		// 超了
-		if(count>XCRAFT_dentry_LIMIT || (char *)de > top)
+		if(count>=XCRAFT_dentry_LIMIT || (char *)de > top)
 			return -ENOSPC;
 	}
 

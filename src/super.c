@@ -107,7 +107,7 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
 
     disk_inode->i_atime = cpu_to_le32(inode->i_atime.tv_sec);
     disk_inode->i_mtime = cpu_to_le32(inode->i_mtime.tv_sec);
-    disk_inode->i_dtime = cpu_to_le32(xi->i_dtime);
+    disk_inode->i_nr_files = cpu_to_le32(xi->i_nr_files);
     disk_inode->i_blocks_lo = cpu_to_le32(inode->i_blocks);
     disk_inode->i_links_count = cpu_to_le16(inode->i_nlink);
     disk_inode->i_flags = cpu_to_le32(xi->i_flags);

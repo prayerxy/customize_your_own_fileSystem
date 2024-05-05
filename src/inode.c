@@ -98,7 +98,7 @@ struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 
 
 	// XCraft_inode_info 字段赋值
-	xi->i_dtime = le32_to_cpu(disk_inode->i_dtime);
+	xi->i_nr_files = le32_to_cpu(disk_inode->i_nr_files);
 	xi->i_block_group = block_group;
 	xi->i_flags = le32_to_cpu(disk_inode->i_flags);
 	
@@ -175,11 +175,13 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr*qstr, int mode){
 		goto failed_ino;
 	}
 
-	// 首先将i_flags字段置0
+	// 初始化xi中的字段
 	xi = XCRAFT_I(inode);
 	xi->i_flags = 0;
+	xi->i_block_group = inode_get_block_group(sb_info, ino);
+	xi->i_nr_files = 0;
 
-
+	
 	if (S_ISLNK(mode)) {
 #if MNT_IDMAP_REQUIRED()
         inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
@@ -241,6 +243,17 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr*qstr, int mode){
 		inode->i_mapping->a_ops = &XCraft_aops;
 		set_nlink(inode, 1);
 	}
+
+	bh = sb_bread(sb, bno);
+	if(!bh){
+	    ret = -EIO;
+	    goto failed_inode;
+	}
+
+	memset(bh->b_data,0,XCRAFT_BLOCK_SIZE);
+	mark_buffer_dirty(bh);
+	brelse(bh);
+	// 此时inode已经分配好了，但是还没有插入目录项
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
     cur_time = current_time(inode);
@@ -598,6 +611,75 @@ end:
 	return retval;
 }
 
+// 删除目录项操作函数
+static int XCraft_delete_entry(struct inode * dir, struct XCraft_dir_entry *de_del, struct buffer_head *bh)
+{
+	// 此时可能是哈希树，也可能不是哈希树
+	// 哈希树我们扫一个块，不是哈希树我们便扫要分裂成哈希树的目录项限制个数
+	struct XCraft_indo_info *dir_info = XCRAFT_I(dir);
+	struct super_block *sb = dir->i_sb;
+
+	// last作用是前推之后需要把最后一个置0
+	struct XCraft_dir_entry *bottom, *de, *next, *last;
+	char *top;
+
+	unsigned short reclen;
+	int count = 0;
+
+	// 判断是否为哈希树
+	unsigned long flag;
+	// 不是哈希树的话目录项的个数上界会受XCRAFT_dentry_LIMIT限制
+	flag = XCraft_INODE_ISHASH_TREE(dir_info->i_flags);
+
+	reclen = sizeof(struct XCraft_dir_entry);
+
+	de = (struct XCraft_dir_entry *)bh->b_data;
+	bottom = de;
+	next = NULL;
+	last = NULL;
+	// 锁定该磁盘块底部的位置
+	top = bh->b_data + sb->s_blocksize;
+
+	// 循环遍历
+	while((char *)de <= top && count < XCRAFT_dentry_LIMIT){
+		// 与de_del进行比较
+		reclen = le16_to_cpu(de->rec_len);
+		if(de == de_del) {
+			//此时已经发现了目录项
+			next = (struct XCraft_dir_entry*)((char *)de + reclen)
+			// 由flag判断要前推多少
+			if(flag){
+				memmove(de, next, (char *)(top) - (char *)next);
+				// 获取需要重置的last
+				last = (struct XCraft_dir_entry *)(top - sizeof(struct XCraft_dir_entry));
+			}
+			else{
+				memmove(de, next, (char *)(bottom + XCRAFT_dentry_LIMIT) - (char *)next);
+				last = bottom + XCRAFT_dentry_LIMIT - 1;
+			}
+		}
+		// 移动至下一个目录项
+		de = (struct XCraft_dir_entry *)((char *)de + reclen);
+		if(!flag)
+			count++;
+	}
+
+	// de_del是否存在此dir中
+	if(!last)
+		return -ENOENT;
+	
+	// 对last全部置0
+	memset(last, 0, sizeof(struct XCraft_dir_entry));
+	
+	// 更新dir中的数据
+	dir->i_atime = dir->i_mtime = dir->i_ctime = current_time(dir);
+	mark_inode_dirty(dir);
+	// 此时我们需要mark_buffer_dirty
+	mark_buffer_dirty(bh);
+	brelse(bh);
+	return 0;
+}
+
 
 // 哈希搜索目录项
 // dir是目录inode, qstr中存储了文件名，res_dir是我们最终要返回的对应此文件名的目录项
@@ -729,7 +811,7 @@ static struct buffer_head *XCraft_find_entry(struct inode *dir,
 	top = bh->b_data + sb->s_blocksize;
 
 
-	while((char *)de < top && count<=XCRAFT_dentry_LIMIT){
+	while((char *)de < top && count<XCRAFT_dentry_LIMIT){
 		// 检查名字是否匹配
 		if(strncmp(de->name, name, namelen) == 0){
 			// 已经找到
@@ -816,6 +898,7 @@ static int XCraft_create(struct inode *dir,
 
 	if(S_ISDIR(mode))
 		inc_nlink(dir);
+	dir_info->i_nr_files += 1;
 	mark_inode_dirty(dir);
 
 	// setup dentry
@@ -853,7 +936,7 @@ static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, un
 	// 获取目录项
 	bh = XCraft_find_entry(dir, &dentry->d_name, &de);
 	if(!bh)
-		return -EIO;
+		return NULL;
 	// 由inode号获取inode
 	uint32_t ino = le32_to_cpu(de->inode);
 	inode = XCraft_iget(sb, ino);
@@ -876,9 +959,15 @@ end:
 // link
 static int XCraft_link(struct dentry *old_dentry,
 					   struct inode *dir, struct dentry *dentry){
-	// 获取old_dentry对应的inode
+	// 获取old_dentry对应的inode以及info
 	struct inode *inode = old_dentry->d_inode;
 	int ret;
+	// 获取dir对应的dir_info
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    struct timespec64 cur_time;
+#endif
 
 	// 对获取的inode进行时间修改
 	inode->i_ctime = current_time(inode);
@@ -898,6 +987,16 @@ static int XCraft_link(struct dentry *old_dentry,
 		iput(inode);
 	}
 
+	// 更新dir中的相关时间信息
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    cur_time = current_time(dir);
+    dir->i_mtime = dir->i_atime = cur_time;
+    inode_set_ctime_to_ts(dir, cur_time);
+#else
+    dir->i_mtime = dir->i_atime = dir->i_ctime = current_time(dir);
+#endif
+	dir_info->i_nr_files += 1;
+	mark_inode_dirty(dir);
 	return ret;
 }
 
@@ -907,17 +1006,136 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry){
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
 	// 获取dentry对应的inode
 	struct inode *inode = d_inode(dentry);
+	struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
+
+	struct XCraft_dir_entry *de;
+	struct buffer_head *bh;
+
+	// retval
+	int retval, i;
+	// 获取此inode的ino，后面位图释放时使用
+	uint32_t ino = inode->i_ino;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
     struct timespec64 cur_time;
 #endif
 
-	uint32_t ino = inode->i_ino;
+	// 首先我们进行搜索，获取目录项
+	bh = XCraft_find_entry(dir, &dentry->d_name, &de);
+	if(!bh){
+		retval = -ENOENT;
+		goto end;
+	}
+
+	// 由获取到的目录项进行删除
+	retval = XCraft_delete_entry(dir, de, bh);
+	if(retval)
+		goto end_delete;
+	
+	if(S_ISLNK(inode->i_mode))
+		goto clean_inode;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    cur_time = current_time(dir);
+    dir->i_mtime = dir->i_atime = cur_time;
+    inode_set_ctime_to_ts(dir, cur_time);
+#else
+    dir->i_mtime = dir->i_atime = dir->i_ctime = current_time(dir);
+#endif
+
+	// 如果inode是目录，需要将dir的硬连接数减1
+	if(S_ISDIR(inode->i_mode))
+		drop_nlink(dir);
+	
+	mark_inode_dirty(dir);
+
+	// 还不用清除inode
+	// 分目录和文件两种情况:
+	// 1. 目录没有外来硬连接文件时nlink是2
+	// 2. 文件没有外来硬连接文件时nlink是1
+
+	if(S_ISDIR(inode->i_mode) && inode->i_nlink > 2){
+		inode_dec_link_count(inode);
+		goto end_delete;
+	}
+
+	if(S_ISREG(inode->i_mode) && inode->i_nlink > 1){
+		inode_dec_link_count(inode);
+		goto end_delete;
+	}
+
+	// 此时都需要清除inode
+	// 目录我们需要释放所有hash块
+	// 文件我们需要释放所有磁盘块
+
+	if(S_ISDIR(inode->i_mode)){
+		// 此时硬连接是2
+		// 分hash树和非hash树两种情况删除
+	    if(XCraft_INODE_ISHASH_TREE(inode_info->i_flags)){
+			// 分级删除
+
+
+		}
+		else{
+			// 直接释放i_block[0]
+			// 此时并没有构建hash树
+
+		}
 
 
 
 
 
-	return 0;
+
+
+
+	}
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+clean_inode:
+	// 清空inode信息并且mark dirty
+	inode_info->i_nr_files = 0;
+	inode_info->i_block_group = 0;
+	inode_info->i_flags = 0;
+	for(i=0; i<XCRAFT_N_BLOCK; i++)
+		inode_info->i_block[i] = 0;
+
+	inode->i_blocks = 0;
+	inode->i_size = 0;
+	i_uid_write(inode, 0);
+    i_gid_write(inode, 0);
+	inode->i_mode = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    inode->i_mtime.tv_sec = inode->i_atime.tv_sec = 0;
+    inode_set_ctime(inode, 0, 0);
+#else
+    inode->i_ctime.tv_sec = inode->i_mtime.tv_sec = inode->i_atime.tv_sec = 0;
+#endif
+
+	drop_nlink(inode);
+	mark_inode_dirty(inode);
+	// block释放均在前面完成
+	// inode位图释放此inode
+	put_inode(sb_info, ino);
+	
+end_delete:
+	brelse(bh);
+end:
+	return retval;
 }
 
 #if MNT_IDMAP_REQUIRED()
@@ -957,6 +1175,8 @@ static int XCraft_symlink(struct inode *dir,
 	ret = XCraft_add_entry(dentry, inode);
 	// 表示插入成功
 	if(!ret){
+		ci_dir->i_nr_files++;
+		mark_inode_dirty(dir);
 		inode->i_link = (char *) ci->i_data;
 		memcpy(inode->i_link, symname, l);
 		inode->i_size = l - 1;
@@ -1003,14 +1223,24 @@ static int XCraft_mkdir(struct inode *dir,
 // rmdir
 static int XCraft_rmdir(struct inode *dir, struct dentry *dentry){
 	struct super_block *sb = dir->i_sb;
+	struct inode *inode = d_inode(dentry);
+	struct XCraft_inode_info *xi = XCRAFT_I(inode);
+	struct buffer_head *bh;
 
-
-
+	// 判断此文件夹是否为空
+	// 如果其下有目录的话，它的i_nlink字段会大于2
+	if(inode->i_nlink > 2)
+		return -ENOTEMPTY;
+	
+	// 检查所删除的目录下是否还有文件
+	if(xi->i_nr_files!=0)
+		return -ENOTEMPTY;
+	
 	return 0;
 }
 
 // rename
-// 
+// 将old_dir中的old_dentry对应的文件移植到new_dir下，命名为new_dentry中的文件名
 #if MNT_IDMAP_REQUIRED()
 static int XCraft_rename(struct mnt_idmap *id,
                            struct inode *old_dir,
@@ -1034,9 +1264,10 @@ static int XCraft_rename(struct inode *old_dir,
 #endif
 {
 	struct super_block *sb = old_dir->i_sb;
+	struct XCraft_inode_info *old_dir_info = XCRAFT_I(old_dir);
 	struct XCraft_inode_info *new_dir_info = XCRAFT_I(new_dir);
 	// old_dentry中关联的inode和new_dentry中关联的inode
-	struct inode * old_inode, * new_inode;
+	struct inode * old_inode;
 
 	// 由old_dentry找到的目录项结构
 	struct XCraft_dir_entry *old_de, *new_de;
@@ -1048,6 +1279,7 @@ static int XCraft_rename(struct inode *old_dir,
 
 	// 最终的返回字段
 	int retval;
+	retval = 0;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
     struct timespec64 cur_time;
@@ -1067,14 +1299,75 @@ static int XCraft_rename(struct inode *old_dir,
 	retval = -ENOENT;
 
 	// find_entry没找到，或者找到的inode的ino和old_inode的ino不一样
+	if(!old_bh || old_inode->i_ino != le32_to_cpu(old_de->inode))
+		goto end_rename;
 	
+	// 先判断new_dir下与new_entry同名目录项是否存在
+	new_bh = XCraft_find_entry(new_dir, &new_dentry->d_name, &new_de);
+	// 此时表示同名目录项存在，报错
+	if(new_bh && new_de){
+		retval = -EEXIST;
+		goto end_rename;
+	}
+
+	// new_dir下不存在new_dentry则继续
+
+	// 旧目录中删掉old_dentry，新目录中添加new_dentry
+	// 首先我们进行删除目录项的操作
+	retval = XCraft_delete_entry(old_dir, old_de, old_bh);
+	if(retval)
+		// 删除失败
+		goto end_rename;
+		
+	// 对old_dir进行时间修改和字段更新
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    cur_time = current_time(old_dir);
+    old_dir->i_atime = old_dir->i_mtime = cur_time;
+    inode_set_ctime_to_ts(old_dir, cur_time);
+#else
+    old_dir->i_atime = old_dir->i_ctime = old_dir->i_mtime = current_time(old_dir);
+#endif
+	old_dir_info->i_nr_files -= 1;
+
+	if(S_ISDIR(old_inode->i_mode))
+		// 删除old_dir目录下的一个目录需要如下更新
+		drop_nlink(old_dir);
+	mark_inode_dirty(old_dir);
+
+
+	// 删除成功，我们进行添加目录项的操作
+	retval = XCraft_add_entry(new_dentry, old_inode);
+	if(retval)
+		goto end_rename;
+
+	// 对new_dir进行时间修改和字段更新
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    cur_time = current_time(new_dir);
+    new_dir->i_atime = new_dir->i_mtime = cur_time;
+    inode_set_ctime_to_ts(new_dir, cur_time);
+#else
+    new_dir->i_atime = new_dir->i_ctime = new_dir->i_mtime = current_time(new_dir);
+#endif
+	new_dir_info->i_nr_files += 1;
+
+	if(S_ISDIR(old_inode->i_mode))
+		//增添new_dir目录下的一个目录需要如下更新
+		inc_nlink(new_dir);
+	mark_inode_dirty(new_dir);
+
+	
+	// 添加成功之后将new_dentry与old_inode关联起来
+	d_instantiate(new_dentry, old_inode);
+
+	// old_inode我们进行了访问,更新时间字段
+	old_inode->i_ctime = current_time(old_inode);
+	mark_inode_dirty(old_inode);
 	
 
-
-	
-
-
-	return 0;
+end_rename:
+	brelse(old_bh);
+	brelse(new_bh);
+	return retval;
 }
 // get_link
 static const char *XCraft_get_link(struct dentry *dentry, struct inode *inode,

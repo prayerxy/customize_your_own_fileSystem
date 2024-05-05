@@ -64,7 +64,7 @@ struct XCraft_inode{
     __le32 i_atime; /* access time */
     __le32 i_ctime; /* creation time */
     __le32 i_mtime; /* modification time */
-    __le32 i_dtime; /* deletion time */
+    __le32 i_nr_files; /* number of files */ // 目录下才有用
     __le16 i_gid; /* owner GID */
     __le16 i_links_count; /* hard links count */
     __le32 i_blocks_lo; /* number of blocks 如果是目录inode 哈希树块数量；如果是文件inode 文件占的块大小*/
@@ -190,10 +190,10 @@ do {									\
 struct XCraft_inode_info{
     //ino 逻辑Inode号接在inode->i_no中
     char i_data[32]; /* store symlink content */
-    __u32 i_dtime;
+    __u32 i_nr_files; //只有其是目录才有用，用于确定其下有多少文件和目录
     xcraft_group_t i_block_group;//所在组号
     unsigned long i_flags;//标志位 区别哈希树和普通文件等
-    unsigned int i_block[XCRAFT_N_BLOCK];//指向数据块的指针
+    unsigned int i_block[XCRAFT_N_BLOCK];//指向数据块的指针 
     struct inode vfs_inode;
 };
 struct XCraft_ibmap_info{
