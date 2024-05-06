@@ -8,7 +8,10 @@
 
 #define XCRAFT_MAGIC 0x1234 /* "XCRA" */
 #define XCRAFT_BLOCK_SIZE (1 << 12) /* 4 KiB */
-#define XCRAFT_N_BLOCK 15   //2个直接索引块 2个1级间接索引块 1个2级间接索引块
+#define XCRAFT_N_BLOCK 15   //12个直接索引块 2个1级间接索引块 1个2级间接索引块
+#define XCRAFT_N_DIRECT 12 //直接索引块的个数
+#define XCRAFT_N_INDIRECT 2 //1级间接索引块个数
+#define XCRAFT_N_DOUBLE_INDIRECT 1 //2级间接索引块个数
 #define XCRAFT_NAME_LEN 255
 #define XCRAFT_INODE_RATIO 4
 #define XCRAFT_DESC_LIMIT_blo 2
@@ -123,6 +126,9 @@ struct XCraft_group_desc{
 
 // 判断indirect_levels字段是否超出范围
 #define ERR_BAD_DX_DIR	-75000
+
+// 判断文件大小是否超出了我们的索引块能索引的最大块数
+#define ERR_BAD_REG_SIZE	-75001
 
 // 定义file type类型
 #define XCRAFT_FT_LINK 0

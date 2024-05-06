@@ -1,4 +1,3 @@
-
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -16,6 +15,159 @@
 
 static const struct inode_operations XCraft_inode_operations;
 static const struct inode_operations XCraft_symlink_inode_operations;
+
+// 删除所有的hash块
+// 只有判断其存在hash树了才会调用
+static int XCraft_delete_hash_block(struct XCraft_inode_info *xi){
+    unsigned int i_block;
+	struct buffer_head *bh;
+	struct dx_root *root;
+	unsigned indirect_levels;
+	int retval;
+
+
+	// retval赋值
+	retval = 0;
+	// i_block
+	i_block = xi->i_block[0];
+	// 获取dx_root
+	bh = sb_bread(sb, i_block);
+	if(!bh){
+	    retval = -EIO;
+		goto out;
+	}
+
+	root = (struct dx_root *)bh->b_data;
+	indirect_levels = root->info.indirect_levels;
+
+	// 开始释放hash树中的索引块和磁盘块
+
+
+
+
+
+
+
+
+
+
+
+out:
+	return retval;
+}
+
+// 删除文件中所有相关的磁盘块
+static int XCraft_delete_file_block(struct inode *inode){
+	struct super_block *sb = inode->i_sb;
+	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
+	struct XCraft_inode_info *xi = XCRAFT_I(inode);
+	unsigned int *i_block = xi->i_block;
+	struct buffer_head *bh, *bh2;
+	int i, j, retval;
+	// 用于后面释放块时存储块号
+	unsigned int bno;
+	// 获取文件大小，占多少个块以此来确定到底释放多少块
+	unsigned int i_blocks = inode->i_blocks;
+
+	// 后面释放时会用到这个临时变量
+	unsigned int nr_used = i_blocks;
+	// 一个块能容纳多少个块号
+	// 块号是__le32类型
+	unsigned int bno_num_per_block = XCRAFT_BLOCK_SIZE / sizeof(__le32); // 向下取整
+	retval = 0;
+
+	// 判断是否用到直接索引块，一级间接索引块和二级间接索引块
+	int isdirect, is_indirect, is_double_indirect;
+
+	// 直接索引、一级间接索引和二级间接索引最大索引磁盘块块数
+	unsigned int direct_max_blocks, indirect_max_blocks, double_indirect_max_blocks;
+	
+	// 计算并赋值，对上述判断变量初始化
+	direct_max_blocks = XCRAFT_N_DIRECT;
+	indirect_max_blocks = direct_max_blocks + XCRAFT_N_INDIRECT * bno_num_per_block;
+	double_indirect_max_blocks = indirect_max_blocks + XCRAFT_N_DOUBLE_INDIRECT * bno_num_per_block * bno_num_per_block;
+	isdirect = is_indirect = is_double_indirect = 0;
+	// 进行判断
+	isdirect = 1;
+	if(i_blocks>direct_max_blocks){
+		is_indirect = 1;
+		if(i_blocks > indirect_max_blocks && i_blocks <= double_indirect_max_blocks)
+			is_double_indirect = 1;
+		if(i_blocks > double_indirect_max_blocks){
+			// i_blocks超出了文件的最大块数
+			retval = ERR_BAD_REG_SIZE;
+			goto end;
+		}
+	}
+
+	// 对所占的直接索引块直接释放
+	if(isdirect){
+	    unsigned int free_direct;
+		free_direct = (nr_used > direct_max_blocks?direct_max_blocks:nr_used);
+		for(i=0;i<free_direct;i++){
+	        bh = sb_bread(sb, i_block[i]);
+			if(!bh){
+			    retval = -EIO;
+				goto end;
+			}
+			memset(bh->b_data,0,XCRAFT_BLOCK_SIZE);
+			mark_buffer_dirty(bh);
+			put_blocks(sb_info, i_block[i],1);
+			brelse(bh);
+	    }
+		nr_used-=free_direct;
+	}
+
+	// 对所占的一级间接索引块释放
+	if(is_indirect){
+		// free_indirect为1级间接索引块中释放多少个块
+		unsigned int free_indirect; 
+		free_indirect = (nr_used > XCRAFT_N_INDIRECT*bno_num_per_block?XCRAFT_N_INDIRECT*bno_num_per_block:nr_used);
+		__le32 *bno_block;
+		unsigned int tmp = free_indirect;
+		// 对free_indirect进行判断
+		while(tmp!=0){
+
+			for(i=0;i<XCRAFT_N_INDIRECT;i++){
+				bh = sb_bread(sb, i_block[XCRAFT_N_DIRECT+i]);
+				if(!bh){
+				    retval = -EIO;
+					goto end;
+				}
+				bno_block = (__le32 *)bh->b_data;
+				// 释放一级间接索引块中的块
+				for(j=0;j<bno_num_per_block && tmp;j++){
+					bno = le32_to_cpu(bno_block[j]);
+					bh2 = sb_bread(sb, bno);
+					if(!bh2){
+				    	retval = -EIO;
+						goto end;
+					}
+					memset(bh2->b_data, 0, XCRAFT_BLOCK_SIZE);
+					mark_buffer_dirty(bh2);
+					put_blocks(sb_info, bno, 1);
+					brelse(bh2);
+					tmp--;
+				}
+				
+
+			}
+		}
+	}
+	
+begin:
+
+
+out_bh:
+	brelse(bh);
+end:
+	return retval;
+}
+
+
+
+
+
 
 // 由ino获取指定的inode
 struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
@@ -1010,11 +1162,13 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry){
 
 	struct XCraft_dir_entry *de;
 	struct buffer_head *bh;
+	struct dx_root *root;
 
 	// retval
 	int retval, i;
 	// 获取此inode的ino，后面位图释放时使用
 	uint32_t ino = inode->i_ino;
+	unsigned int i_block;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
     struct timespec64 cur_time;
 #endif
@@ -1070,40 +1224,35 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry){
 	if(S_ISDIR(inode->i_mode)){
 		// 此时硬连接是2
 		// 分hash树和非hash树两种情况删除
-	    if(XCraft_INODE_ISHASH_TREE(inode_info->i_flags)){
-			// 分级删除
-
-
+		i_block = inode_info->i_block[0];
+	    bh = sb_bread(sb,i_block);
+		if(!bh){
+			retval = -EIO;
+			goto end_delete;
+		}
+		if(XCraft_INODE_ISHASH_TREE(inode_info->i_flags)){
+			// 调用释放hash树的函数来实现
+			retval = XCraft_delete_hash_block(inode_info);
+			if(retval)
+				// 删除失败
+				goto end_delete;
 		}
 		else{
 			// 直接释放i_block[0]
 			// 此时并没有构建hash树
-
+			// 将i_block[0]的磁盘块内容全部置0
+			memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
+			// 释放块
+			put_blocks(sb_info, i_block, 1);
 		}
-
-
-
-
-
-
-
-
 	}
 
-
-
-	
-
-
-
-
-
-
-
-
-
-
-
+	else{
+		// 文件
+		retval = XCraft_delete_file_block(inode);
+		if(retval)
+			goto end_delete;
+	}
 
 clean_inode:
 	// 清空inode信息并且mark dirty
@@ -1117,6 +1266,11 @@ clean_inode:
 	inode->i_size = 0;
 	i_uid_write(inode, 0);
     i_gid_write(inode, 0);
+	// 目录的话i_nlink是2，所以减两次
+	// 文件的话i_nlink是1，所以减一次
+	drop_nlink(inode);
+	if(S_ISDIR(inode->i_mode))
+		drop_nlink(inode);
 	inode->i_mode = 0;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
@@ -1125,8 +1279,7 @@ clean_inode:
 #else
     inode->i_ctime.tv_sec = inode->i_mtime.tv_sec = inode->i_atime.tv_sec = 0;
 #endif
-
-	drop_nlink(inode);
+	
 	mark_inode_dirty(inode);
 	// block释放均在前面完成
 	// inode位图释放此inode
@@ -1225,7 +1378,6 @@ static int XCraft_rmdir(struct inode *dir, struct dentry *dentry){
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode = d_inode(dentry);
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
-	struct buffer_head *bh;
 
 	// 判断此文件夹是否为空
 	// 如果其下有目录的话，它的i_nlink字段会大于2
@@ -1236,7 +1388,7 @@ static int XCraft_rmdir(struct inode *dir, struct dentry *dentry){
 	if(xi->i_nr_files!=0)
 		return -ENOTEMPTY;
 	
-	return 0;
+	return XCraft_unlink(dir, dentry);
 }
 
 // rename
@@ -1369,6 +1521,7 @@ end_rename:
 	brelse(new_bh);
 	return retval;
 }
+
 // get_link
 static const char *XCraft_get_link(struct dentry *dentry, struct inode *inode,
 									   struct delayed_call *callback)
