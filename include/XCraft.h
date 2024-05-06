@@ -130,6 +130,9 @@ struct XCraft_group_desc{
 // 判断文件大小是否超出了我们的索引块能索引的最大块数
 #define ERR_BAD_REG_SIZE	-75001
 
+// 判断释放文件中的块时是否释放完
+#define ERR_FAIL_FREE_REG_BLOCKS -75002
+
 // 定义file type类型
 #define XCRAFT_FT_LINK 0
 #define XCRAFT_FT_REG_FILE 1
