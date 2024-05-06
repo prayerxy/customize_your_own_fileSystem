@@ -18,11 +18,13 @@ static const struct inode_operations XCraft_symlink_inode_operations;
 
 // 删除所有的hash块
 // 只有判断其存在hash树了才会调用
-static int XCraft_delete_hash_block(struct XCraft_inode_info *xi)
+static int XCraft_delete_hash_block(struct inode *inode)
 {
+	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	unsigned int i_block;
 	struct buffer_head *bh;
 	struct dx_root *root;
+	struct super_block *sb = inode->i_sb;
 	unsigned indirect_levels;
 	int retval;
 
@@ -42,7 +44,7 @@ static int XCraft_delete_hash_block(struct XCraft_inode_info *xi)
 	indirect_levels = root->info.indirect_levels;
 
 	// 开始释放hash树中的索引块和磁盘块
-	
+
 
 
 out:
@@ -120,7 +122,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 	}
 
 	// 索引块读取使用 一级和两级
-	__le32 *bno_block, bno_block2;
+	__le32 *bno_block, *bno_block2;
 	unsigned int tmp;
 	// 对所占的一级间接索引块释放
 	if (is_indirect)
@@ -200,7 +202,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 						retval = -EIO;
 						goto end;
 					}
-					memset(bh3->data, 0, XCRAFT_BLOCK_SIZE);
+					memset(bh3->b_data, 0, XCRAFT_BLOCK_SIZE);
 					mark_buffer_dirty(bh3);
 					put_blocks(sb_info, bno2, 1);
 					brelse(bh3);
@@ -676,7 +678,7 @@ again:
 	bh = sb_bread(sb, dx_get_block(at));
 	if (IS_ERR(bh))
 	{
-		err = PRT_ERR(bh);
+		err = PTR_ERR(bh);
 		bh = NULL;
 		goto cleanup;
 	}
@@ -865,7 +867,7 @@ static int XCraft_delete_entry(struct inode *dir, struct XCraft_dir_entry *de_de
 {
 	// 此时可能是哈希树，也可能不是哈希树
 	// 哈希树我们扫一个块，不是哈希树我们便扫要分裂成哈希树的目录项限制个数
-	struct XCraft_indo_info *dir_info = XCRAFT_I(dir);
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
 	struct super_block *sb = dir->i_sb;
 
 	// last作用是前推之后需要把最后一个置0
@@ -897,7 +899,7 @@ static int XCraft_delete_entry(struct inode *dir, struct XCraft_dir_entry *de_de
 		if (de == de_del)
 		{
 			// 此时已经发现了目录项
-			next = (struct XCraft_dir_entry *)((char *)de + reclen)
+			next = (struct XCraft_dir_entry *)((char *)de + reclen);
 				// 由flag判断要前推多少
 				if (flag)
 			{
@@ -1347,7 +1349,7 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 		if (XCraft_INODE_ISHASH_TREE(inode_info->i_flags))
 		{
 			// 调用释放hash树的函数来实现
-			retval = XCraft_delete_hash_block(inode_info);
+			retval = XCraft_delete_hash_block(inode);
 			if (retval)
 				// 删除失败
 				goto end_delete;

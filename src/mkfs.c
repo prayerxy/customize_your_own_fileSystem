@@ -288,7 +288,7 @@ static int XCraft_write_inode_store(int fd, struct superblock_padding *sb){
                             S_IWGRP | S_IXUSR | S_IXGRP | S_IXOTH);
     root_inode->i_uid=0;
     root_inode->i_size_lo=htole32(XCRAFT_BLOCK_SIZE);
-    root_inode->i_ctime=root_inode->i_atime=root_inode->i_mtime=root_inode->i_dtime=htole32(0);
+    root_inode->i_ctime=root_inode->i_atime=root_inode->i_mtime=htole32(0);
     root_inode->i_gid=0;
     //..与.目录项
     root_inode->i_links_count=htole16(2);

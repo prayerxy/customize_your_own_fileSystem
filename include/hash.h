@@ -3,10 +3,16 @@
 #include "XCraft.h"
 // hash value to caculate 
 // name:文件名 len:文件名长度  hinfo:hash值(储存hash值的结构体)
-int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo){
+static int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo){
 
     return 0;
 }
+
+static void dx_release(struct dx_frame *frames);
+
+static struct buffer_head *XCraft_append(struct inode*dir,uint32_t*block);
+
+static void dx_insert_block(struct dx_frame *frame,uint32_t hash,uint32_t bno);
 
 static inline uint32_t dx_node_limit(void)
 {
