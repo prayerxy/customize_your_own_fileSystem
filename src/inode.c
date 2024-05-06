@@ -22,11 +22,16 @@ static int XCraft_delete_hash_block(struct inode *inode)
 {
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	unsigned int i_block;
-	struct buffer_head *bh;
+	struct buffer_head *bh, *bh2, *bh3;
 	struct dx_root *root;
+	struct dx_node *node;
 	struct super_block *sb = inode->i_sb;
-	unsigned indirect_levels;
-	int retval;
+	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
+	struct dx_entry *entries, *entries2;
+	unsigned indirect_levels, count, count2;
+	// cur_level为当前所处的level
+	int retval, cur_level;
+
 
 	// retval赋值
 	retval = 0;
@@ -40,13 +45,138 @@ static int XCraft_delete_hash_block(struct inode *inode)
 		goto out;
 	}
 
+	// 用于遍历dx_root和dx_node计数使用
+	unsigned tmp, tmp2, tmp3;
+
 	root = (struct dx_root *)bh->b_data;
 	indirect_levels = root->info.indirect_levels;
+	entries = root->info.entries;
+	
+	// 获取dx_root层的entries count
+	count = dx_get_count(entries);
 
+	// 存储遍历信息
+	struct del_dx_frame frames[indirect_levels + 1], *frame;
+	frame = frames;
+	frames[0].bh = bh;
+	frames[0].bno = i_block;
 	// 开始释放hash树中的索引块和磁盘块
+	// 利用标签只写遍历dx_root和dx_node的
 
+	// 给tmp,tmp2和当前所处级数赋值
+	tmp = tmp2 = tmp3 = 0;
+	cur_level = 0;
+	// 物理块号存储
+	unsigned int bno, bno2, bno3, bno_tmp;
 
+	// 每次记录上一级的遍历位置
+	// bh at tmp3
+	struct dx_entry *at;
+	struct buffer_head *bh_tmp;
+	// 标志位
+	int flag = 1;
 
+	while(tmp<count){
+		// 从entries中获取block
+		bno = le32_to_cpu(entries->block);
+		bh = sb_bread(sb, bno);
+		if(!bh){
+			retval = -EIO;
+			goto out;
+		}
+		// 赋值
+		
+		frames[0].entries = root->info.entries;
+		frames[0].at = entries;
+
+		bh2 = bh;
+		bno2 = bno;
+		if(cur_level<indirect_levels){
+			// 还需要遍历下一级，dx_node类型
+			// 当前级数重置
+again:
+			cur_level+=1; 
+			node = (struct dx_node *)bh2->b_data;
+			entries2 = node->entries;
+			count2 = dx_get_count(entries2);
+back:
+			while(tmp2<count2){
+				bno_tmp = le32_to_cpu(entries2->block);
+				bh_tmp = sb_bread(sb, bno_tmp);
+				if(!bh_tmp){
+					retval = -EIO;
+					goto out_bh;
+				}
+				if(cur_level < indirect_levels){
+					frame = frame + 1;
+					frame->bh = bh2;
+					node = (struct dx_node *)bh2->b_data;
+					frame->entries = node->entries;
+					frame->at = entries2;
+					frame->bno = bno2;
+					// 重置tmp2
+					tmp2 = 0;
+					bh2 = bh_tmp;
+					bno2 = bno_tmp;
+					goto again;
+				}
+				// 否则就是已经在最后一级
+				memset(bh_tmp->b_data, 0, XCRAFT_BLOCK_SIZE);
+				mark_buffer_dirty(bh_tmp);
+				put_blocks(sb_info, bno_tmp, 1);
+				brelse(bh_tmp);
+				tmp2+=1;
+				entries2 = entries2 + 1;
+			}
+			// 最后一级
+			memset(bh2->b_data, 0, XCRAFT_BLOCK_SIZE);
+			mark_buffer_dirty(bh2);
+			put_blocks(sb_info, bno2, 1);
+			brelse(bh2);
+			
+			cur_level-=1;
+			if(!cur_level)
+				goto root_again;
+
+			// 确定回退到的确定位置
+			while(flag){
+				bh2 = frame->bh;
+				bno2 = frame->bno;
+				tmp2 = (frame->at) - (frame->entries);
+				entries2 = frame->at;
+				node = (struct dx_node *)bh2->b_data;
+				count2 = dx_get_count(node->entries);
+				if(tmp2<count2-1){
+					tmp2++;
+					entries2 = entries2 + 1;
+					frame = frame - 1;
+					break;
+				}
+				// 已经满了
+				memset(bh2->b_data, 0, XCRAFT_BLOCK_SIZE);
+				mark_buffer_dirty(bh2);
+				put_blocks(sb_info, bno2, 1);
+				brelse(bh2);
+				frame = frame - 1;
+				cur_level-=1;
+			}
+
+			goto back;
+		}
+
+root_again:
+		entries = entries + 1;
+		tmp++;
+		tmp2 = 0;
+	}
+
+	// 释放dx_root
+	memset(frames[0].bh, 0, XCRAFT_BLOCK_SIZE);
+	mark_buffer_dirty(frames[0].bh);
+	put_blocks(sb_info, frames[0].bno, 1);
+	brelse(frames[0].bh);
+out_bh:
+	brelse(bh);
 out:
 	return retval;
 }

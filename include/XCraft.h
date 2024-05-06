@@ -240,6 +240,14 @@ struct dx_frame
     struct dx_entry *at;//最终的dx_entry
 };
 
+struct del_dx_frame
+{
+    struct buffer_head *bh;//dx_entry所在磁盘块
+    struct dx_entry *entries;//同一级的dx_entry
+    struct dx_entry *at;//最终的dx_entry
+    unsigned int bno; //物理块号
+};
+
 struct dx_map_entry
 {
 	u32 hash;
