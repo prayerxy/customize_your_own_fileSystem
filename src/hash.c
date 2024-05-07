@@ -39,13 +39,17 @@ static int XCraft_set_inode_flag(struct inode*dir,uint32_t flag){
 }
 
 static struct buffer_head *XCraft_append(struct inode*dir,uint32_t*block){
-	struct  buffer_head *bh;
+	struct buffer_head *bh;
 	*block=get_free_blocks(XCRAFT_SB(dir->i_sb),1);
 	bh=sb_bread(dir->i_sb,*block);
+	
 	if(!bh){
 		printk(KERN_ERR "XCraft: append: no memory\n");
 		return NULL;
 	}
+	// 更新dir中的字段,追加一个块多使用了一个块
+	dir->i_blocks+=1;
+	mark_inode_dirty(dir);
 	return bh;
 }
 
