@@ -1,4 +1,4 @@
-#define pr_diary(xcraft) "XCraft: " xcraft
+#define pr_fmt(fmt) "XCraft: " fmt
 
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
@@ -7,24 +7,44 @@
 #include <linux/mpage.h>
 
 #include "../include/bitmap.h"
-#include "../includeXCraft.h"
+#include "../include/XCraft.h"
 
+// 普通文件中由逻辑iblock将指定的物理块和bh_result相关联，如果物理块不存在，create字段为1则创建一个
 static int XCraft_file_get_block(struct inode *inode,
                                    sector_t iblock,
                                    struct buffer_head *bh_result,
                                    int create)
+{
+	
 
 
-#if XCraft_aop_version_judge()
-static void XCraft_readahead(struct readahead_control *rac);
+
+
+
+
+}
+
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
+static void XCraft_readahead(struct readahead_control *rac)
+{
+
+}
 #else
-static int XCraft_readpage(struct file *file, struct page *page);
+static int XCraft_readpage(struct file *file, struct page *page)
+{
+
+}
 #endif
 
 static int XCraft_writepage(struct page *page,
-			  struct writeback_control *wbc);
+			  struct writeback_control *wbc)
+{
 
-#if XCraft_aop_version_judge()
+	return 0;
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
 static int XCraft_write_begin(struct file *file, struct address_space *mapping,
 				loff_t pos, unsigned len,
 				struct page **pagep, void **fsdata)
@@ -33,12 +53,22 @@ static int XCraft_write_begin(struct file *file, struct address_space *mapping,
 			    loff_t pos, unsigned len, unsigned flags,
 			    struct page **pagep, void **fsdata)
 #endif
+{
+
+	return 0;
+}
 
 
 static int XCraft_write_end(struct file *file,
 			  struct address_space *mapping,
 			  loff_t pos, unsigned len, unsigned copied,
-			  struct page *page, void *fsdata);
+			  struct page *page, void *fsdata)
+{
+
+
+end:
+	return ret;
+}
 
 
 
@@ -56,13 +86,12 @@ static ssize_t XCraft_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 int XCraft_sync_file(struct file *file, loff_t start, loff_t end, int datasync);
 
 // address_space_operations
-static const struct address_space_operations XCraft_aops = {
-#if XCraft_aop_version_judge()
+const struct address_space_operations XCraft_aops = {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
     .readahead = XCraft_readahead,
 #else
     .readpage = XCraft_readpage,
 #endif
-	.readpage		= XCraft_readpage,
 	.writepage		= XCraft_writepage,
 	.write_begin		= XCraft_write_begin,
 	.write_end		= XCraft_write_end,

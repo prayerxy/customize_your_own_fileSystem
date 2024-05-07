@@ -70,7 +70,7 @@ struct XCraft_inode{
     __le32 i_nr_files; /* number of files */ // 目录下才有用
     __le16 i_gid; /* owner GID */
     __le16 i_links_count; /* hard links count */
-    __le32 i_blocks_lo; /* number of blocks 如果是目录inode 哈希树块数量；如果是文件inode 文件占的块大小*/
+    __le32 i_blocks_lo; /* number of blocks 文件或者目录所使用的块的个数*/
     __le32 i_flags; /* file flags B+树等 */
     __le32 i_block[XCRAFT_N_BLOCK]; /* pointers to blocks */
     char i_data[32]; /* store symlink content */
@@ -255,6 +255,11 @@ struct dx_map_entry
 	u16 size;
 };
 
+/*superblock functions*/
+int XCraft_fill_super(struct super_block *sb, void *data, int silent);
+
+
+/* inode functions */
 struct inode *XCraft_iget(struct super_block *sb, unsigned long ino);
 int XCraft_destroy_inode_cache(void);
 int XCraft_init_inode_cache(void);

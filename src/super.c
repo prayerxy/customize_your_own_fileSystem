@@ -1,4 +1,4 @@
-#define pr_diary(xcraft) KBUILD_MODNAME ": " xcraft
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
@@ -244,8 +244,7 @@ struct super_operations XCraft_sops =
 };
 
 // fill super for mount
-static int
-XCraft_fill_super(struct super_block *sb, void *data, int silent){
+int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     struct buffer_head *bh = NULL, *bh1 = NULL;
     struct XCraft_superblock_info *sb_info = NULL;
     struct XCraft_superblock *disk_sb = kzalloc(sizeof(struct XCraft_superblock), GFP_KERNEL);

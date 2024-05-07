@@ -1,3 +1,5 @@
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -194,10 +196,12 @@ static int XCraft_delete_file_block(struct inode *inode)
 	// 用于后面释放块时存储块号
 	unsigned int bno, bno2;
 	// 获取文件大小，占多少个块以此来确定到底释放多少块
-	unsigned int i_blocks = inode->i_blocks;
+	unsigned int i_size = inode->i_size;
+	// 由i_size向上取整获取文件数据占了多少个块
+	uint32_t i_blocks = ceil_div(i_size, XCRAFT_BLOCK_SIZE);
 
 	// 后面释放时会用到这个临时变量
-	unsigned int nr_used = i_blocks;
+	uint32_t nr_used = i_blocks;
 	// 一个块能容纳多少个块号
 	// 块号是__le32类型
 	unsigned int bno_num_per_block = XCRAFT_BLOCK_SIZE / sizeof(__le32); // 向下取整
@@ -579,7 +583,7 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 
 	// 统一将目录和文件的i_block[0]置成bno，其他字段置为0
 	memset(xi->i_block, 0, sizeof(xi->i_block));
-	if (S_ISDIR(mode))
+	if (S_ISDIR(mode))	
 	{
 		// 目录只初始化其i_block[0]
 		xi->i_block[0] = bno;

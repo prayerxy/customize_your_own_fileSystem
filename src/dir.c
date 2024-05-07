@@ -1,4 +1,4 @@
-#define pr_diary(xcraft) "XCraft: " xcraft
+#define pr_fmt(fmt) "XCraft: " fmt
 
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
