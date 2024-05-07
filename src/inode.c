@@ -22,7 +22,7 @@ static int XCraft_delete_hash_block(struct inode *inode)
 {
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	unsigned int i_block;
-	struct buffer_head *bh, *bh2, *bh3;
+	struct buffer_head *bh, *bh2;
 	struct dx_root *root;
 	struct dx_node *node;
 	struct super_block *sb = inode->i_sb;
@@ -31,6 +31,8 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	unsigned indirect_levels, count, count2;
 	// cur_level为当前所处的level
 	int retval, cur_level;
+	// 存储遍历信息
+	struct del_dx_frame frames[indirect_levels + 1], *frame;
 
 
 	// retval赋值
@@ -42,21 +44,19 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	if (!bh)
 	{
 		retval = -EIO;
-		goto out;
+		goto end;
 	}
 
 	// 用于遍历dx_root和dx_node计数使用
-	unsigned tmp, tmp2, tmp3;
+	unsigned tmp, tmp2;
 
 	root = (struct dx_root *)bh->b_data;
 	indirect_levels = root->info.indirect_levels;
-	entries = root->info.entries;
+	entries = root->entries;
 	
 	// 获取dx_root层的entries count
 	count = dx_get_count(entries);
 
-	// 存储遍历信息
-	struct del_dx_frame frames[indirect_levels + 1], *frame;
 	frame = frames;
 	frames[0].bh = bh;
 	frames[0].bno = i_block;
@@ -64,13 +64,12 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	// 利用标签只写遍历dx_root和dx_node的
 
 	// 给tmp,tmp2和当前所处级数赋值
-	tmp = tmp2 = tmp3 = 0;
+	tmp = tmp2 = 0;
 	cur_level = 0;
 	// 物理块号存储
-	unsigned int bno, bno2, bno3, bno_tmp;
+	unsigned int bno, bno2, bno_tmp;
 
 	// 每次记录上一级的遍历位置
-	// bh at tmp3
 	struct dx_entry *at;
 	struct buffer_head *bh_tmp;
 	// 标志位
@@ -82,11 +81,11 @@ static int XCraft_delete_hash_block(struct inode *inode)
 		bh = sb_bread(sb, bno);
 		if(!bh){
 			retval = -EIO;
-			goto out;
+			goto end;
 		}
 		// 赋值
 		
-		frames[0].entries = root->info.entries;
+		frames[0].entries = root->entries;
 		frames[0].at = entries;
 
 		bh2 = bh;
@@ -177,7 +176,7 @@ root_again:
 	brelse(frames[0].bh);
 out_bh:
 	brelse(bh);
-out:
+end:
 	return retval;
 }
 
