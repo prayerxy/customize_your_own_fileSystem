@@ -263,6 +263,8 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent);
 struct inode *XCraft_iget(struct super_block *sb, unsigned long ino);
 int XCraft_destroy_inode_cache(void);
 int XCraft_init_inode_cache(void);
+/* get max filesize*/
+unsigned int XCraft_get_max_filesize(void);
 
 /* file functions */
 extern const struct file_operations XCraft_file_operations;

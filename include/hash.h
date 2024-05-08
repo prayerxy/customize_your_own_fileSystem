@@ -1,10 +1,41 @@
 #ifndef _XCRAFT_HASH_H
 #define _XCRAFT_HASH_H
 #include "XCraft.h"
+static __u32 dx_hack_hash_unsigned(const char *name, int len)
+{
+	__u32 hash, hash0 = 0x12a3fe2d, hash1 = 0x37abe8f9;
+	const unsigned char *ucp = (const unsigned char *) name;
+
+	while (len--) {
+		hash = hash1 + (hash0 ^ (((int) *ucp++) * 7152373));
+
+		if (hash & 0x80000000)
+			hash -= 0x7fffffff;
+		hash1 = hash0;
+		hash0 = hash;
+	}
+	return hash0 << 1;
+}
+
+
 // hash value to caculate 
 // name:文件名 len:文件名长度  hinfo:hash值(储存hash值的结构体)
 static int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo){
+	__u32 hash;
+	__u32 minor_hash = 0;
+	const char *p;
+	int i;
 
+	if(hinfo->hash_version != XCRAFT_HTREE_VERSION){
+		hinfo->hash = 0;
+		return -1;
+	}	
+
+	hash = dx_hack_hash_unsigned(name, len);
+	hash = hash & ~1;
+	if(hash == (0x7fffffff << 1))
+		hash = (0x7fffffff - 1) << 1;
+	hinfo->hash = hash;
     return 0;
 }
 

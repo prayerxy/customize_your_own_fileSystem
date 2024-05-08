@@ -18,6 +18,18 @@
 static const struct inode_operations XCraft_inode_operations;
 static const struct inode_operations XCraft_symlink_inode_operations;
 
+
+// 获取文件最大大小
+unsigned int XCraft_get_max_filesize(void){
+	unsigned int max_file_blocks;
+	// 一个块能容纳多少个块号
+	unsigned int bno_num_per_block = XCRAFT_BLOCK_SIZE / sizeof(__le32);
+	max_file_blocks = XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT * bno_num_per_block + XCRAFT_N_DOUBLE_INDIRECT * bno_num_per_block * bno_num_per_block;
+	// 返回最大文件大小
+	return max_file_blocks * XCRAFT_BLOCK_SIZE;
+}
+
+uint32_t XCraft_get_max_filesize(void)
 // 删除所有的hash块
 // 只有判断其存在hash树了才会调用
 static int XCraft_delete_hash_block(struct inode *inode)

@@ -9,10 +9,6 @@
 #include "../include/bitmap.h"
 
 
-
-
-
-
 static void dx_release(struct dx_frame *frames)
 {
 	struct dx_root_info *info;

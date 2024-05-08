@@ -301,6 +301,7 @@ static int XCraft_write_end(struct file *file,
 			  loff_t pos, unsigned len, unsigned copied,
 			  struct page *page, void *fsdata)
 {
+	// 
 
 	
 	return 0;
@@ -309,17 +310,25 @@ static int XCraft_write_end(struct file *file,
 
 
 // 定位文件指针
-loff_t XCraft_llseek(struct file *file, loff_t offset, int whence);
+loff_t XCraft_llseek(struct file *file, loff_t offset, int whence){
+	return generic_file_llseek(file, offset, whence);
+}
 
 // 读操作
-static ssize_t XCraft_file_read_iter(struct kiocb *iocb, struct iov_iter *to);
+static ssize_t XCraft_file_read_iter(struct kiocb *iocb, struct iov_iter *to){
+	return generic_file_read_iter(iocb, to);
+}
 
 
 // 写操作
-static ssize_t XCraft_file_write_iter(struct kiocb *iocb, struct iov_iter *from);
+static ssize_t XCraft_file_write_iter(struct kiocb *iocb, struct iov_iter *from){
+	return generic_file_write_iter(iocb, from);
+}
 
 // 同步文件内容
-int XCraft_sync_file(struct file *file, loff_t start, loff_t end, int datasync);
+int XCraft_sync_file(struct file *file, loff_t start, loff_t end, int datasync){
+	return generic_file_fsync(file, start, end, datasync);
+}
 
 // address_space_operations
 const struct address_space_operations XCraft_aops = {
