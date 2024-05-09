@@ -41,8 +41,8 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	struct dx_node *node;
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
-	struct dx_entry *entries, *entries2;
-	unsigned indirect_levels, count, count2;
+	struct dx_entry *entries, *entries2, *entries3;
+	unsigned indirect_levels, count, count2, count3;
 	// cur_level为当前所处的level
 	int retval, cur_level;
 	// 存储遍历信息
@@ -81,13 +81,14 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	tmp = tmp2 = 0;
 	cur_level = 0;
 	// 物理块号存储
-	unsigned int bno, bno2, bno_tmp;
+	unsigned int bno, bno2, bno_tmp, bno3;
 
-	// 每次记录上一级的遍历位置
-	struct dx_entry *at;
-	struct buffer_head *bh_tmp;
+	struct buffer_head *bh_tmp, bh3;
 	// 标志位
 	int flag = 1;
+
+	// 遍历使用
+	int i;
 
 	while(tmp<count){
 		// 从entries中获取block
@@ -134,6 +135,23 @@ back:
 					goto again;
 				}
 				// 否则就是已经在最后一级
+				// 对其中的dx_entry进行遍历并释放其块
+				node = (struct dx_node *)bh_tmp->b_data;
+				entries3 = node->entries;
+				count3 = dx_get_count(entries3);
+				for(i=0;i<count3;i++){
+					entries3 = entries3 + i;
+					bno3 = le32_to_cpu(entries3->block);
+					bh3 = sb_bread(sb, bno3);
+					if(!bh3){
+						retval = -EIO;
+						goto out_bh;
+					}
+					memset(bh3->b_data, 0, XCRAFT_BLOCK_SIZE);
+					mark_buffer_dirty(bh3);
+					put_blocks(sb_info, bno3, 1);
+					brelse(bh3);
+				}
 				memset(bh_tmp->b_data, 0, XCRAFT_BLOCK_SIZE);
 				mark_buffer_dirty(bh_tmp);
 				put_blocks(sb_info, bno_tmp, 1);
