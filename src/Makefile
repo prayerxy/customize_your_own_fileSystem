@@ -1,9 +1,9 @@
 obj-m += xcraft.o
-xcraft-objs :=  super.o hash.o inode.o
+xcraft-objs :=  fs.o super.o inode.o file.o dir.o
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-MKFS = mkfs.xcraft
+MKFS = mkfs.XCraft
 
 all: $(MKFS)
 	make -C $(KDIR) M=$(PWD) modules

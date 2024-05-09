@@ -6,8 +6,19 @@
 #include <linux/module.h>
 #include <linux/mpage.h>
 
-#include "../include/bitmap.h"
 #include "../include/XCraft.h"
+#include "../include/bitmap.h"
+#include "../include/hash.h"
+
+// 获取文件最大大小
+unsigned int XCraft_get_max_filesize(void){
+	unsigned int max_file_blocks;
+	// 一个块能容纳多少个块号
+	unsigned int bno_num_per_block = XCRAFT_BLOCK_SIZE / sizeof(__le32);
+	max_file_blocks = XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT * bno_num_per_block + XCRAFT_N_DOUBLE_INDIRECT * bno_num_per_block * bno_num_per_block;
+	// 返回最大文件大小
+	return max_file_blocks * XCRAFT_BLOCK_SIZE;
+}
 
 // 普通文件中由逻辑iblock将指定的物理块和bh_result相关联，如果物理块不存在，create字段为1则创建一个
 // iblock是索引 从0开始
@@ -301,10 +312,144 @@ static int XCraft_write_end(struct file *file,
 			  loff_t pos, unsigned len, unsigned copied,
 			  struct page *page, void *fsdata)
 {
-	// 
+	struct inode *inode = file->f_inode;
+	struct XCraft_inode_info *xi = XCRAFT_I(inode);
+	struct super_block *sb = inode->i_sb;
+	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
+	unsigned int *i_block = xi->i_block;
+	struct buffer_head *bh;
+	// 后续遍历时会需要bno和bno2来存储物理块号
+	int bno, bno2;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0)
+    struct timespec64 cur_time;
+#endif
+    uint32_t nr_blocks_old;
 
-	
-	return 0;
+	/* Complete the write() */
+	int ret = generic_write_end(file, mapping, pos, len, copied, page, fsdata);
+	if(ret < len){
+		pr_err("wrote less than requested.");
+		return ret;
+	}
+
+	nr_blocks_old = inode->i_blocks;
+
+	/* Update inode metadata */
+	inode->i_blocks = inode->i_size / XCRAFT_BLOCK_SIZE + 2;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+    cur_time = current_time(inode);
+    inode->i_mtime = cur_time;
+    inode_set_ctime_to_ts(inode, cur_time);
+#else
+    inode->i_mtime = inode->i_ctime = current_time(inode);
+#endif
+
+	mark_inode_dirty(inode);
+
+	// 开始遍历的逻辑块号
+	uint32_t first_block;
+	// inode是文件时最多能有多少数据块
+	unsigned int max_file_blocks;
+	// 一个块能容纳多少个块号
+	unsigned int bno_num_per_block = XCRAFT_BLOCK_SIZE / sizeof(__le32);
+
+	// 一级间接索引块中会使用
+	unsigned int indirect_index, indirect_offset, indirect_bno;
+
+	// 二级间接索引块的时候使用
+	unsigned int double_indirect_index, double_indirect_one_offset, double_indirect_two_offset, double_indirect_bno;
+
+	// 索引块读取会使用 一级和两级
+	__le32 *bno_block, *bno2_block;
+
+	if(nr_blocks_old > inode->i_blocks){
+		// 释放掉多余的块我们要
+		
+		/*Free unused blocks from page cache */
+		truncate_pagecache(inode, inode->i_size);
+		// remove unused blocks 
+		first_block = inode->i_blocks - 1;
+		max_file_blocks = XCraft_get_max_filesize() / XCRAFT_BLOCK_SIZE;
+
+		// 逻辑块号遍历
+		while(first_block < max_file_blocks){
+			// 获取的对应的物理块号存在bno中
+			if(first_block < XCRAFT_N_DIRECT){
+				bno = i_block[first_block];
+				if(!bno)
+					break;
+				// 重置
+				i_block[first_block] = 0;
+				mark_inode_dirty(inode);
+			}
+			else if(first_block >= XCRAFT_N_DIRECT && first_block < XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT * bno_num_per_block){
+				indirect_index = (first_block - XCRAFT_N_DIRECT) / bno_num_per_block;
+				indirect_offset = (first_block - XCRAFT_N_DIRECT) % bno_num_per_block;
+				indirect_bno = i_block[XCRAFT_N_DIRECT + indirect_index];
+				if(!indirect_bno)
+					break;
+				bh = sb_bread(sb, indirect_bno);
+				// 读取一级间接索引块
+				if(!bh){
+		    		ret = -EIO;
+					goto end;
+				}
+
+				// 依据indirect_offset获取对应的块号
+				bno_block = (__le32 *)bh->b_data;
+				bno = le32_to_cpu(bno_block[indirect_offset]);
+				if(!bno)
+					break;
+				bno_block[indirect_offset] = bno;
+				mark_buffer_dirty(bh);
+				brelse(bh);
+			}
+			else{
+				double_indirect_index = (first_block - XCRAFT_N_DIRECT - XCRAFT_N_INDIRECT * bno_num_per_block) / (bno_num_per_block * bno_num_per_block);
+				double_indirect_one_offset = ((first_block - XCRAFT_N_DIRECT - XCRAFT_N_INDIRECT * bno_num_per_block) % (bno_num_per_block * bno_num_per_block))/ bno_num_per_block;
+				double_indirect_two_offset = ((first_block - XCRAFT_N_DIRECT - XCRAFT_N_INDIRECT * bno_num_per_block) % (bno_num_per_block * bno_num_per_block))% bno_num_per_block;
+				double_indirect_bno = i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + double_indirect_index];
+				if(!double_indirect_bno)
+					break;
+				bh = sb_bread(sb, double_indirect_bno);
+				if(!bh){
+				    ret = -EIO;
+					goto end;
+				}
+				bno2_block = (__le32 *)bh->b_data;
+				bno2 = le32_to_cpu(bno2_block[double_indirect_one_offset]);
+				if(!bno2)
+					break;
+				bh = sb_bread(sb, bno2);
+				if(!bh){
+				    ret = -EIO;
+					goto end;
+				}
+				bno_block = (__le32 *)bh->b_data;
+				bno = le32_to_cpu(bno_block[double_indirect_two_offset]);
+				if(!bno)
+					break;
+				// 重置
+				bno_block[double_indirect_two_offset] = 0;
+				mark_buffer_dirty(bh);
+				brelse(bh);
+			}
+			
+			// 释放对应的物理块
+			bh = sb_bread(sb, bno);
+			if(!bh){
+				ret = -EIO;
+				goto end;
+			}
+			memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
+			put_blocks(sb_info, bno, 1);
+			mark_buffer_dirty(bh);
+			brelse(bh);
+			first_block+=1;
+		}
+	}
+end:
+	return ret;
 }
 
 

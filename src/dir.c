@@ -6,6 +6,7 @@
 #include <linux/module.h>
 
 #include "../include/XCraft.h"
+#include "../include/hash.h"
 // eno是除.和..之外第几个目录项开始遍历搜索 eno从0开始
 // i_block = xi->i_block[0]
 static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int eno, unsigned int i_block){
@@ -13,11 +14,19 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
 	struct dx_entry *entries, *entries2, *entries3;
-	unsigned indirect levels, count, count2, count3;
+	unsigned indirect_levels, count, count2, count3;
 	// cur_level 为当前所处的level
 	int retval, cur_level;
 	// 存储遍历信息
 	struct dx_frame frames[indirect_levels + 1], *frame;
+	struct buffer_head *bh, *bh2;
+
+	// dx_root
+	struct dx_root *root;
+	// dx_node
+	struct dx_node *node;
+
+	int i;
 
 	retval = 0;
 	bh = sb_bread(sb, i_block);
@@ -44,7 +53,7 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 	unsigned int bno, bno2, bno_tmp, bno3;
 
 	
-	struct buffer_head *bh_tmp, bh3;
+	struct buffer_head *bh_tmp, *bh3;
 	int flag = 1;
 	int eno_count = 0;
 
@@ -135,7 +144,6 @@ back:
 
 			while(flag){
 				bh2 = frame->bh;
-				bno2 = frame->bno;
 				tmp2 = (frame->at) - (frame->entries);
 				entries2 = frame->at;
 				node = (struct dx_node *)bh2->b_data;
@@ -166,9 +174,9 @@ end:
 
 
 //ls
-static int XCraft_readdir(struct file *file, struct dir_context *ctx){
+static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 	struct inode *inode = file_inode(dir);
-	struct XCraft_inode_info *xi = XCraft_i(inode);
+	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bh;
 	struct XCraft_dir_entry *de;
@@ -196,12 +204,9 @@ static int XCraft_readdir(struct file *file, struct dir_context *ctx){
 	// 遍历目录项 分哈希树和不是哈希树两种情况
 	i_block = xi->i_block[0];
 
-	if(XCraft_INODE_ISHASH_TREE(xi->i_flags)){
+	if(XCraft_INODE_ISHASH_TREE(xi->i_flags))
 		// 哈希树情况，遍历hash树查找目录项
-
-
-
-	}
+		ret = XCraft_dx_readdir(inode, ctx, eno, i_block);
 	else{
 		int count = 0;
 		bh = sb_bread(sb, i_block);
@@ -221,7 +226,7 @@ static int XCraft_readdir(struct file *file, struct dir_context *ctx){
                               DT_UNKNOWN))
 				break;
 			ctx->pos++;
-			reclen = le16_to_cpu(de->reclen);
+			reclen = le16_to_cpu(de->rec_len);
 			de = (struct XCraft_dir_entry *)((char *)de + reclen);
 			count++;
 		}

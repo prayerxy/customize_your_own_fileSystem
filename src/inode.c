@@ -19,17 +19,6 @@ static const struct inode_operations XCraft_inode_operations;
 static const struct inode_operations XCraft_symlink_inode_operations;
 
 
-// 获取文件最大大小
-unsigned int XCraft_get_max_filesize(void){
-	unsigned int max_file_blocks;
-	// 一个块能容纳多少个块号
-	unsigned int bno_num_per_block = XCRAFT_BLOCK_SIZE / sizeof(__le32);
-	max_file_blocks = XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT * bno_num_per_block + XCRAFT_N_DOUBLE_INDIRECT * bno_num_per_block * bno_num_per_block;
-	// 返回最大文件大小
-	return max_file_blocks * XCRAFT_BLOCK_SIZE;
-}
-
-uint32_t XCraft_get_max_filesize(void)
 // 删除所有的hash块
 // 只有判断其存在hash树了才会调用
 static int XCraft_delete_hash_block(struct inode *inode)
@@ -83,7 +72,7 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	// 物理块号存储
 	unsigned int bno, bno2, bno_tmp, bno3;
 
-	struct buffer_head *bh_tmp, bh3;
+	struct buffer_head *bh_tmp, *bh3;
 	// 标志位
 	int flag = 1;
 
@@ -979,7 +968,7 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 	unsigned int blocksize;
 	unsigned int i_block;
 	int retval;
-
+	printk("xc is a sb\n");
 	// super block
 	// 获取超级块
 	sb = dir->i_sb;
@@ -1015,9 +1004,12 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 
 	if (retval == -EEXIST)
 		printk("same name of dentry has been existed\n");
-	else if (retval == -ENOSPC)
+	else if (retval == -ENOSPC){
 		// 开始建立哈希树
 		retval = XCraft_make_hash_tree(dentry, dir, inode, bh);
+		printk("you are a pig\n");
+
+	}
 
 put_bh:
 	brelse(bh);
