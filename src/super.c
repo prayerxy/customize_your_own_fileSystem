@@ -457,7 +457,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     }
 
     // init root inode
-    root_inode = XCraft_iget(sb, 0);
+    root_inode = XCraft_iget(sb, 1);
     if (IS_ERR(root_inode)) {
         ret = PTR_ERR(root_inode);
         goto out_free_group_desc;

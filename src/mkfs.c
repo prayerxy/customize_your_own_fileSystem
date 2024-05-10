@@ -118,21 +118,22 @@ static struct superblock_padding *write_superblock(int fd, struct stat *fstats){
 // 初始化组描述符 写到磁盘上
 // group_desc可能占用多个块 在main函数算出需要多少块
 static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
+    // 这么多个块组需要多大的块组描述符
     uint32_t group_desc_size = sb->xcraft_sb.s_groups_count * sizeof(struct XCraft_group_desc);
-    //计算desc需要多少块
+    //计算desc需要多少块 需要把保留区考虑进来
     uint32_t group_desc_blocks = ceil_div(group_desc_size, XCRAFT_BLOCK_SIZE);
     //限制最大块数量
     if(group_desc_blocks > XCRAFT_DESC_LIMIT_blo){
         perror("group_desc_blocks is too large");
         return -1;
     }
-    struct XCraft_group_desc *group_desc = malloc(group_desc_blocks * XCRAFT_BLOCK_SIZE);
+    struct XCraft_group_desc *group_desc = malloc(XCRAFT_DESC_LIMIT_blo * XCRAFT_BLOCK_SIZE);
     if(!group_desc){
         perror("malloc group_desc failed");
         return -1;
     }
     //清0
-    memset(group_desc, 0, group_desc_blocks * XCRAFT_BLOCK_SIZE);
+    memset(group_desc, 0, XCRAFT_DESC_LIMIT_blo * XCRAFT_BLOCK_SIZE);
     //初始化第一个块组的组描述符
     group_desc[0].bg_inode_bitmap = htole32(1+XCRAFT_DESC_LIMIT_blo);
     group_desc[0].bg_block_bitmap = htole32(2+XCRAFT_DESC_LIMIT_blo);
@@ -184,15 +185,14 @@ static int XCraft_write_group_desc(int fd, struct superblock_padding *sb){
             printf("\t group[%u] inode count=%u\n",i,sb->xcraft_sb.s_inodes_per_group);
         }
     }
-    int ret=write(fd, group_desc, group_desc_blocks * XCRAFT_BLOCK_SIZE);
-    if(ret != group_desc_blocks * XCRAFT_BLOCK_SIZE){
+    int ret=write(fd, group_desc, XCRAFT_DESC_LIMIT_blo * XCRAFT_BLOCK_SIZE);
+    if(ret != XCRAFT_DESC_LIMIT_blo * XCRAFT_BLOCK_SIZE){
         perror("write group_desc failed");
         free(group_desc);
         return -1;
     }
     free(group_desc);
     return 0;
-
 }
 
 //mkfs write inode_bitmap to block
