@@ -49,7 +49,10 @@ cd /mnt/test
 mkdir -p dir1
 cd dir1
 cd ..
+mkdir -p dir2
 ls
+rm -d dir1
+rm -d dir2
 EOF
 
 # 卸载 kernel mount point 和 module

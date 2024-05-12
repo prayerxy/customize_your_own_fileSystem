@@ -341,15 +341,16 @@ static int add_dirent_to_buf(struct dentry *dentry,
 
 		// 循环遍历
 		while((char *)de <= top && count<XCRAFT_dentry_LIMIT){
-			// 检查是否已经存在该目录项
-			// 比较是否有同名现象
-			if(strncmp(de->name,name,namelen) == 0)
-				brelse(bh);
-				return -EEXIST;
-
 			// 跳出条件为找到一个目录项的inode号为0，此目录项可用
 			if(!de->inode)
 				break;
+			// 检查是否已经存在该目录项
+			// 比较是否有同名现象
+			if(!strncmp(de->name,name,namelen)){
+				printk("same name in add_dirent\n");
+				return -EEXIST;
+			}
+
 			reclen = le16_to_cpu(de->rec_len);
 			// 移动到下一个目录项
 			de = (struct XCraft_dir_entry *)((char *)de + reclen);
@@ -376,16 +377,17 @@ static int add_dirent_to_buf(struct dentry *dentry,
 			de->file_type = XCRAFT_FT_REG_FILE;
 		else if(S_ISLNK(inode->i_mode))	
 			de->file_type = XCRAFT_FT_LINK;
-		memcpy(de->name, name, namelen);
-		// 最后一个字符置为空字符
-		de->name[namelen] = '\0';
-		if(namelen>XCRAFT_NAME_LEN){
+		if(namelen>=XCRAFT_NAME_LEN){
 			printk("add_dirent_to_buf: name too long\n");
 			de->name[XCRAFT_NAME_LEN] = '\0';
 			namelen = XCRAFT_NAME_LEN;
 			dentry->d_name.len = namelen;
 		}
+		memcpy(de->name, name, namelen);
+		// 最后一个字符置为空字符
+		de->name[namelen] = '\0';
 		de->name_len = namelen;
+		printk("in add_dirent_to_buf, success");
 	}
 
 	// dir访问时间更新
