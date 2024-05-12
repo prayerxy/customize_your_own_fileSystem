@@ -48,6 +48,8 @@ sudo su <<EOF
 cd /mnt/test
 mkdir -p dir1
 cd dir1
+mkdir -p dir3
+rm -d dir3
 cd ..
 mkdir -p dir2
 ls

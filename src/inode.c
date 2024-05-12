@@ -1421,6 +1421,7 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 	// 获取dentry对应的inode
 	struct inode *inode = d_inode(dentry);
 	struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
 
 	struct XCraft_dir_entry *de = NULL;
 	struct buffer_head *bh = NULL;
@@ -1442,12 +1443,13 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 		retval = -ENOENT;
 		goto end;
 	}
-
+	printk("find_entry success\n");
 	// 由获取到的目录项进行删除
 	retval = XCraft_delete_entry(dir, de, bh);
 	if (retval)
 		goto end_delete;
 
+	printk("delete_entry success\n");
 	if (S_ISLNK(inode->i_mode))
 		goto clean_inode;
 
@@ -1463,7 +1465,8 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 	// 如果inode是目录，需要将dir的硬连接数减1
 	if (S_ISDIR(inode->i_mode))
 		drop_nlink(dir);
-
+	
+	dir_info->i_nr_files-=1;
 	mark_inode_dirty(dir);
 
 	// 还不用清除inode
@@ -1473,12 +1476,14 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 
 	if (S_ISDIR(inode->i_mode) && inode->i_nlink > 2)
 	{
+		printk("此时不用删除目录\n");
 		inode_dec_link_count(inode);
 		goto end_delete;
 	}
 
 	if (S_ISREG(inode->i_mode) && inode->i_nlink > 1)
 	{
+		printk("此时不用删除文件\n");
 		inode_dec_link_count(inode);
 		goto end_delete;
 	}
