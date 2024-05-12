@@ -9,7 +9,7 @@ all: $(MKFS)
 	make -C $(KDIR) M=$(PWD) modules
 
 IMAGE ?= test.img
-IMAGESIZE ?= 200
+IMAGESIZE ?= 256
 # To test max files(40920) in directory, the image size should be at least 159.85 MiB
 # 40920 * 4096(block size) ~= 159.85 MiB
 

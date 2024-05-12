@@ -185,9 +185,7 @@ static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 	int ret;
 	// 第几个目录项除了.和.. 0开始
 	int eno;
-
 	unsigned int i_block;
-
 	// 检查是否是目录
 	if(!S_ISDIR(inode->i_mode))
 		return -ENOTDIR;
@@ -200,7 +198,6 @@ static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 	// ctx->pos从0开始
 
 	eno = ctx->pos - 2;
-
 	// 遍历目录项 分哈希树和不是哈希树两种情况
 	i_block = xi->i_block[0];
 
@@ -216,6 +213,7 @@ static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 		}
 		de = (struct XCraft_dir_entry *)bh->b_data;
 		de+=eno;
+		reclen = sizeof(struct XCraft_dir_entry);
 		top = bh->b_data + sb->s_blocksize - reclen;
 		while((char *)de <= top && count<XCRAFT_dentry_LIMIT){
 			if(!de->inode)
@@ -232,7 +230,6 @@ static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 		}
 		brelse(bh);
 	}
-
 end:	
 	return ret;
 }

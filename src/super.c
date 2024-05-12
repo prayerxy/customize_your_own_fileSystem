@@ -18,6 +18,9 @@ int XCraft_init_inode_cache(void)
     XCraft_inode_cache = kmem_cache_create("XCraft_inode_cache",
                                            sizeof(struct XCraft_inode_info),
                                            0, 0, NULL);
+    XCraft_inode_cache = kmem_cache_create_usercopy(
+        "XCraft_inode_cache", sizeof(struct XCraft_inode_info), 0, 0, 0,
+        sizeof(struct XCraft_inode_info), NULL);
     if (XCraft_inode_cache == NULL)
         return -ENOMEM;
     return 0;
@@ -36,7 +39,10 @@ static struct inode *XCraft_alloc_inode(struct super_block *sb)
 {
     struct XCraft_inode_info *xi;
     xi = kmem_cache_alloc(XCraft_inode_cache, GFP_KERNEL);
-    return &(xi->vfs_inode);
+    if(!xi)
+        return NULL;
+    inode_init_once(&xi->vfs_inode);
+    return &xi->vfs_inode;
 }
 
 // destroy_inode
@@ -80,7 +86,7 @@ int group_free_blocks_count(struct XCraft_superblock_info *sbi,struct XCraft_gro
 }
 
 int inode_get_block_group(struct XCraft_superblock_info *sb_info, uint32_t ino)
-{
+{   
     struct XCraft_superblock *disk_sb=sb_info->s_super;
     uint32_t tmp;
     tmp = le32_to_cpu(disk_sb->s_inodes_count)-(sb_info->s_last_group_inodes);
@@ -166,14 +172,12 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     inode_block_begin = le32_to_cpu(desc->bg_inode_table);
     inode_block = inode_block_begin + inode_shift_in_group / XCRAFT_INODES_PER_BLOCK;
     inode_shift_in_block = inode_shift_in_group % XCRAFT_INODES_PER_BLOCK;
-
     
     bh = sb_bread(sb, inode_block);
     if(!bh)
         return -EIO;
     disk_inode = (struct XCraft_inode *)bh->b_data;
     disk_inode += inode_shift_in_block;
-    // 字节序转换存疑
     disk_inode->i_mode = cpu_to_le16(inode->i_mode);
     disk_inode->i_uid = cpu_to_le16(i_uid_read(inode));
     disk_inode->i_gid = cpu_to_le16(i_gid_read(inode));
@@ -209,10 +213,10 @@ static void XCraft_put_super(struct super_block *sb){
     struct buffer_head **group_desc;
     int i;
     if(sb_info){
-        kfree(sb_info->s_sbh);
+        brelse(sb_info->s_sbh);
         kfree(sb_info->s_super);
         group_desc = sb_info->s_group_desc;
-        for(i=0;i < XCRAFT_DESC_LIMIT_blo; i++)
+        for(i=0; i < XCRAFT_DESC_LIMIT_blo; i++)
             brelse(group_desc[i]);
         kfree(group_desc);
         kfree(sb_info);
@@ -237,6 +241,8 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
     disk_sb->s_inodes_per_group = ssb->s_inodes_per_group;
     disk_sb->s_groups_count = ssb->s_groups_count;
     disk_sb->s_last_group_blocks = ssb->s_last_group_blocks;
+    disk_sb->s_magic = ssb->s_magic;
+    disk_sb->s_inode_size = ssb->s_inode_size;
 
     // 回写super block
     mark_buffer_dirty(sb_info->s_sbh);
@@ -266,29 +272,30 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
         bh1 = sb_bread(sb, bg_inode_bitmap);
         if(!bh1)
             return -EIO;
-
+        memcpy(bh1->b_data, (void *)(sb_info->s_ibmap_info[i]->ifree_bitmap), XCRAFT_BLOCK_SIZE);
         mark_buffer_dirty(bh1);
         if (wait)
             sync_dirty_buffer(bh1);
         brelse(bh1);
+
         // block位图可能有多块
         // 先只写一个块
         bh2 = sb_bread(sb, bg_block_bitmap);
         if(!bh2)
             return -EIO;
-        
+
+        memcpy(bh2->b_data, (void *)(sb_info->s_ibmap_info[i]->bfree_bitmap), XCRAFT_BLOCK_SIZE);
         mark_buffer_dirty(bh2);
         if (wait)
             sync_dirty_buffer(bh2);
         brelse(bh2);
-        memcpy((char *)bh2->b_data, (char *)(sb_info->s_ibmap_info[i]->bfree_bitmap), XCRAFT_BLOCK_SIZE);
         
         uint32_t bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32_to_cpu(disk_gdb->bg_nr_blocks));
         if(bfree_blo>1){
             bh3 = sb_bread(sb, bg_block_bitmap+1);
             if(!bh3)
                 return -EIO;
-            memcpy((char *)bh3->b_data, (char *)(sb_info->s_ibmap_info[i]->bfree_bitmap) + XCRAFT_BLOCK_SIZE, XCRAFT_BLOCK_SIZE);
+            memcpy(bh3->b_data, (void *)(sb_info->s_ibmap_info[i]->bfree_bitmap) + XCRAFT_BLOCK_SIZE, XCRAFT_BLOCK_SIZE);
             mark_buffer_dirty(bh3);
             if (wait)
                 sync_dirty_buffer(bh3);
@@ -326,10 +333,11 @@ struct super_operations XCraft_sops =
 
 // fill super for mount
 int XCraft_fill_super(struct super_block *sb, void *data, int silent){
-    struct buffer_head *bh = NULL, *bh1 = NULL;
+    struct buffer_head *bh = NULL;
     struct XCraft_superblock_info *sb_info = NULL;
     struct XCraft_superblock *disk_sb = kzalloc(sizeof(struct XCraft_superblock), GFP_KERNEL);
     struct inode* root_inode = NULL;
+    struct XCraft_inode_info *root_inode_info = NULL;
     int ret;
     int i;
     ret = 0;
@@ -345,7 +353,17 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     if(!bh)
         return -EIO;
     struct XCraft_superblock *disk_sb_tmp = (struct XCraft_superblock *)bh->b_data;
-    memcpy((char *)disk_sb, (char *)disk_sb_tmp, sizeof(struct XCraft_superblock));
+    // memcpy((char *)disk_sb, (char *)disk_sb_tmp, sizeof(struct XCraft_superblock));
+    disk_sb->s_inodes_count = disk_sb_tmp->s_inodes_count;
+    disk_sb->s_blocks_count = disk_sb_tmp->s_blocks_count;
+    disk_sb->s_free_blocks_count = disk_sb_tmp->s_free_blocks_count;
+    disk_sb->s_free_inodes_count = disk_sb_tmp->s_free_inodes_count;
+    disk_sb->s_blocks_per_group = disk_sb_tmp->s_blocks_per_group;
+    disk_sb->s_inodes_per_group = disk_sb_tmp->s_inodes_per_group;
+    disk_sb->s_groups_count = disk_sb_tmp->s_groups_count;
+    disk_sb->s_last_group_blocks = disk_sb_tmp->s_last_group_blocks;
+    disk_sb->s_magic = disk_sb_tmp->s_magic;
+    disk_sb->s_inode_size = disk_sb_tmp->s_inode_size;
 
     // check magic
     if(disk_sb->s_magic != sb->s_magic){
@@ -353,24 +371,32 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
         ret = -EINVAL;
         goto out_brelse;
     }
+    brelse(bh);
 
     // init superblock info
     sb_info = kzalloc(sizeof(struct XCraft_superblock_info), GFP_KERNEL);
     if(!sb_info){
         ret = -ENOMEM;
-        goto out_sb_info;
+        goto out_brelse;
     }
     sb_info->s_blocks_per_group = le32_to_cpu(disk_sb->s_blocks_per_group);
     sb_info->s_inodes_per_group = le32_to_cpu(disk_sb->s_inodes_per_group);
     sb_info->s_desc_per_block = XCRAFT_GROUP_DESCS_PER_BLOCK;
     sb_info->s_groups_count = le32_to_cpu(disk_sb->s_groups_count);
-    sb_info->s_sbh = bh;
+    sb_info->s_sbh = sb_bread(sb, 0);
     sb_info->s_super = disk_sb;
-    sb_info->s_La_init_group=0;//初始化第一个块组
+    sb_info->s_La_init_group=0; //初始化第一个块组
     sb->s_fs_info = sb_info;
     sb_info->s_last_group_inodes = le32_to_cpu(disk_sb->s_inodes_count)-sb_info->s_inodes_per_group*(sb_info->s_groups_count-1);
     sb_info->s_last_group_blocks = le32_to_cpu(disk_sb->s_last_group_blocks);
     // sb_info->s_group_desc = NULL;
+    
+
+    // hash seed
+    sb_info->s_hash_seed[0] = 0x2c55f0c2;
+    sb_info->s_hash_seed[1] = 0x249b59fa;
+    sb_info->s_hash_seed[2] = 0xef80f217;
+    sb_info->s_hash_seed[3] = 0xb8fb094d;
 
     // get s_gdb_count and s_group_desc
     unsigned long gdb_count = 0;
@@ -398,14 +424,14 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     }
     
     for(i=0;i<XCRAFT_DESC_LIMIT_blo;i++){
-        bh1 = sb_bread(sb, i+1);
-        group_desc[i] = bh1;
+        group_desc[i] = sb_bread(sb, i+1);
         
         
-        if(!bh1){
+        if(!group_desc[i]){
             ret = -EIO;
             goto out_free_group_desc;
         }
+        
     }
     sb_info->s_gdb_count = gdb_count;//组描述符占多少个块
     sb_info->s_group_desc = group_desc;
@@ -419,14 +445,16 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     }
     memcpy((void *)sb_info->s_ibmap_info[0]->ifree_bitmap, bh->b_data,
             XCRAFT_BLOCK_SIZE);
+    brelse(bh);
 
     bh=sb_bread(sb,2 + XCRAFT_DESC_LIMIT_blo);
     if(!bh){
         ret = -EIO;
         goto out_free_group_desc;
     }
-
     memcpy((void *)sb_info->s_ibmap_info[0]->bfree_bitmap, bh->b_data,XCRAFT_BLOCK_SIZE);
+    brelse(bh);
+
     if(bfree_blo>1){
         bh=sb_bread(sb,3 + XCRAFT_DESC_LIMIT_blo);
         if(!bh){
@@ -434,6 +462,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
             goto out_free_group_desc;
         }
         memcpy((void *)sb_info->s_ibmap_info[0]->bfree_bitmap+XCRAFT_BLOCK_SIZE, bh->b_data,XCRAFT_BLOCK_SIZE);
+        brelse(bh);
     }
     
     
@@ -443,11 +472,11 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
         sb_info->s_ibmap_info[i]->ifree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE,GFP_KERNEL);
         if(i!=sb_info->s_groups_count-1){
             sb_info->s_ibmap_info[i]->bfree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE,GFP_KERNEL);
-            memset(sb_info->s_ibmap_info[i]->bfree_bitmap,0,XCRAFT_BLOCK_SIZE);
+            memset(sb_info->s_ibmap_info[i]->bfree_bitmap,0xff,XCRAFT_BLOCK_SIZE);
         }
         else{
             sb_info->s_ibmap_info[i]->bfree_bitmap=kzalloc(XCRAFT_BFREE_PER_GROUP_BLO(sb_info->s_last_group_blocks)*XCRAFT_BLOCK_SIZE,GFP_KERNEL);
-            memset(sb_info->s_ibmap_info[i]->bfree_bitmap,0,XCRAFT_BFREE_PER_GROUP_BLO(sb_info->s_last_group_blocks)*XCRAFT_BLOCK_SIZE);
+            memset(sb_info->s_ibmap_info[i]->bfree_bitmap,0xff,XCRAFT_BFREE_PER_GROUP_BLO(sb_info->s_last_group_blocks)*XCRAFT_BLOCK_SIZE);
         }
         memset(sb_info->s_ibmap_info[i]->ifree_bitmap,0xff,XCRAFT_BLOCK_SIZE);
         if(!sb_info->s_ibmap_info[i]->ifree_bitmap||!sb_info->s_ibmap_info[i]->bfree_bitmap){
@@ -463,6 +492,17 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
         goto out_free_group_desc;
     }
 
+    root_inode_info = XCRAFT_I(root_inode);
+    unsigned int root_iblock = root_inode_info->i_block[0];
+    bh = sb_bread(sb, root_iblock);
+    if(!bh){
+        ret = -EIO;
+        goto iput;
+    }
+    memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
+    mark_buffer_dirty(bh);
+    brelse(bh);
+    
 
 #if MNT_IDMAP_REQUIRED()
     inode_init_owner(&nop_mnt_idmap, root_inode, NULL, root_inode->i_mode);
@@ -472,6 +512,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     inode_init_owner(root_inode, NULL, root_inode->i_mode);
 #endif
     sb->s_root = d_make_root(root_inode);
+
     if(!sb->s_root) {
         ret = -ENOMEM;
         goto iput;

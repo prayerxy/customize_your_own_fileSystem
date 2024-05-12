@@ -666,6 +666,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	struct buffer_head *bh;
 	struct dx_frame *frame = frame_in;
 	struct super_block *sb = dir->i_sb;
+	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
 	__u32 hash;
 	unsigned int i_block;
 	unsigned indirect;
@@ -688,7 +689,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	root = (struct dx_root *)bh->b_data;
 	hinfo->hash_version = root->info.hash_version;
 
-	hinfo->seed = XCRAFT_SB(sb)->s_hash_seed;
+	hinfo->seed = sb_info->s_hash_seed;
 	if (entry)
 		XCraft_dirhash(entry->name, entry->len, hinfo);
 	hash = hinfo->hash;
@@ -962,13 +963,12 @@ cleanup:
 static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
-	struct XCraft_inode_info *xi = XCRAFT_I(inode);
+	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
 	struct buffer_head *bh = NULL;
 	struct super_block *sb;
 	unsigned int blocksize;
 	unsigned int i_block;
 	int retval;
-	printk("xc is a sb\n");
 	// super block
 	// 获取超级块
 	sb = dir->i_sb;
@@ -979,7 +979,7 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 		return -EINVAL;
 
 	// 判断时现在是否为哈希树
-	if (XCraft_INODE_ISHASH_TREE(xi->i_flags))
+	if (XCraft_INODE_ISHASH_TREE(dir_info->i_flags))
 	{
 		retval = XCraft_dx_add_entry(dentry, inode);
 		// retval为0表示添加目录项成功
@@ -991,7 +991,8 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 	}
 
 	// 遍历第一个块，此块已经被我们分配过
-	i_block = xi->i_block[0];
+	i_block = dir_info->i_block[0]; //261
+	printk("XCraft_add_entry i_block: %d\n", i_block);
 	bh = sb_bread(sb, i_block);
 	if (!bh)
 	{
@@ -1004,15 +1005,9 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 
 	if (retval == -EEXIST)
 		printk("same name of dentry has been existed\n");
-	else if (retval == -ENOSPC){
+	else if (retval == -ENOSPC)
 		// 开始建立哈希树
 		retval = XCraft_make_hash_tree(dentry, dir, inode, bh);
-		printk("you are a pig\n");
-
-	}
-
-put_bh:
-	brelse(bh);
 end:
 	return retval;
 }
@@ -1180,6 +1175,7 @@ static struct buffer_head *XCraft_find_entry(struct inode *dir,
 	struct buffer_head *bh, *ret;
 	struct super_block *sb = dir->i_sb;
 	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
+
 	int namelen;
 	char *name = entry->name;
 	unsigned int i_block;
@@ -1225,8 +1221,10 @@ static struct buffer_head *XCraft_find_entry(struct inode *dir,
 
 	while ((char *)de < top && count < XCRAFT_dentry_LIMIT)
 	{
+		if(!de->inode)
+			break;
 		// 检查名字是否匹配
-		if (strncmp(de->name, name, namelen) == 0)
+		if (!strncmp(de->name, name, XCRAFT_NAME_LEN))
 		{
 			// 已经找到
 			*res_dir = de;
@@ -1284,6 +1282,7 @@ static int XCraft_create(struct inode *dir,
 
 	// 获取inode
 	inode = XCraft_new_inode(dir, &dentry->d_name, mode);
+
 	if (IS_ERR(inode))
 	{
 		ret = PTR_ERR(inode);
@@ -1298,7 +1297,6 @@ static int XCraft_create(struct inode *dir,
 	ret = XCraft_add_entry(dentry, inode);
 	if (ret)
 		goto end_inode;
-
 	mark_inode_dirty(inode);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
@@ -1312,6 +1310,11 @@ static int XCraft_create(struct inode *dir,
 	if (S_ISDIR(mode))
 		inc_nlink(dir);
 	dir_info->i_nr_files += 1;
+	// 打印目录inode信息
+	printk("dir_inode->i_nlink: %d", dir->i_nlink);
+	printk("dir_inode_info->i_nr_files: %d", dir_info->i_nr_files);
+	printk("添加的目录项的i_nlink: %d",inode->i_nlink);
+	printk("添加的目录项的i_nr_files: %d", inode_info->i_nr_files);
 	mark_inode_dirty(dir);
 
 	// setup dentry
@@ -1333,13 +1336,10 @@ end:
 static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
 	struct super_block *sb = dir->i_sb;
-	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
-	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
-	struct XCraft_inode_info *inode_info = NULL;
 	struct inode *inode = NULL;
 	struct buffer_head *bh = NULL;
-	struct XCraft_disk_inode *disk_inode = NULL;
-	struct XCraft_dir_entry *de;
+	struct XCraft_dir_entry *de = NULL;
+	printk("filename: %s\n", dentry->d_name.name);
 	int ret;
 
 	// 检查文件名长度
@@ -1349,24 +1349,19 @@ static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, un
 	// 获取目录项
 	bh = XCraft_find_entry(dir, &dentry->d_name, &de);
 	if (!bh)
-		return NULL;
+		goto search_end;
 	// 由inode号获取inode
 	uint32_t ino = le32_to_cpu(de->inode);
 	inode = XCraft_iget(sb, ino);
-	if (IS_ERR(inode))
-	{
-		ret = PTR_ERR(inode);
-		goto end;
-	}
 
+	brelse(bh);
+search_end:
 	//  更新dir中的相关时间信息
 	dir->i_atime = current_time(dir);
 	mark_inode_dirty(dir);
 
 	// fill the dentry with the inode
 	d_add(dentry, inode);
-end:
-	brelse(bh);
 	return NULL;
 }
 
@@ -1418,6 +1413,7 @@ static int XCraft_link(struct dentry *old_dentry,
 }
 
 // unlink
+// dir是目录，dentry是目录下的目录项
 static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 {
 	struct super_block *sb = dir->i_sb;
@@ -1426,9 +1422,9 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 	struct inode *inode = d_inode(dentry);
 	struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
 
-	struct XCraft_dir_entry *de;
-	struct buffer_head *bh;
-	struct dx_root *root;
+	struct XCraft_dir_entry *de = NULL;
+	struct buffer_head *bh = NULL;
+	struct dx_root *root = NULL;
 
 	// retval
 	int retval, i;
@@ -1454,6 +1450,7 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 
 	if (S_ISLNK(inode->i_mode))
 		goto clean_inode;
+
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	cur_time = current_time(dir);
@@ -1625,7 +1622,7 @@ static int XCraft_mkdir(struct mnt_idmap *id,
 						struct dentry *dentry,
 						umode_t mode)
 {
-
+	printk("begin mkdir\n");
 	return XCraft_create(id, dir, dentry, mode | S_IFDIR, 0);
 }
 
@@ -1635,7 +1632,7 @@ static int XCraft_mkdir(struct user_namespace *ns,
 						struct dentry *dentry,
 						umode_t mode)
 {
-
+	printk("begin mkdir\n");
 	return XCraft_create(ns, dir, dentry, mode | S_IFDIR, 0);
 }
 #else
@@ -1643,7 +1640,7 @@ static int XCraft_mkdir(struct inode *dir,
 						struct dentry *dentry,
 						umode_t mode)
 {
-
+	printk("begin mkdir\n");
 	return XCraft_create(dir, dentry, mode | S_IFDIR, 0);
 }
 #endif
@@ -1653,6 +1650,7 @@ static int XCraft_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode = d_inode(dentry);
+	// 要删除目录的inode_info xi
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 
 	// 判断此文件夹是否为空

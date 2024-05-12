@@ -24,6 +24,7 @@ static struct dentry *XCraft_mount(struct file_system_type *fs_type,
 // unmount
 void XCraft_kill_sb(struct super_block *sb){
 	kill_block_super(sb);
+	
 	printk("unmounted disk\n");
 }
 
