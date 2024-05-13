@@ -39,6 +39,11 @@ echo "测试镜像挂载到/mnt/test! "
 echo -e "\n"
 sleep 1
 
+#显示文件系统情况
+echo "显示文件系统情况..."
+df -TH
+echo -e "\n"
+sleep 1
 # 检查挂载成功的 kernel 消息
 #dmesg | tail
 
