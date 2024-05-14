@@ -52,14 +52,24 @@ echo "xxxxxxxxxxxxxxxxxxxxxx开始执行文件系统操作xxxxxxxxxxxxxxxxxxxxxx
 sudo su <<EOF
 cd /mnt/test
 mkdir -p dir1
-cd dir1
-mkdir -p dir3
-rm -d dir3
-cd ..
 mkdir -p dir2
-ls
-rm -d dir1
-rm -d dir2
+mkdir -p dir3
+mkdir -p dir4
+mkdir -p dir5
+mkdir -p dir6
+mkdir -p dir7
+mkdir -p dir8
+mkdir -p dir9
+mkdir -p dir10
+mkdir -p dir11
+mkdir -p dir12
+mkdir -p dir13
+mkdir -p dir14
+mkdir -p dir15
+mkdir -p dir17
+
+mkdir -p dir16
+
 EOF
 
 # 卸载 kernel mount point 和 module

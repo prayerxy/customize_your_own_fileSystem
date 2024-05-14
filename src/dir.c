@@ -17,29 +17,34 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 	unsigned indirect_levels, count, count2, count3;
 	// cur_level 为当前所处的level
 	int retval, cur_level;
-	// 存储遍历信息
-	struct dx_frame frames[indirect_levels + 1], *frame;
-	struct buffer_head *bh, *bh2;
-
 	// dx_root
 	struct dx_root *root;
 	// dx_node
 	struct dx_node *node;
 
-	int i;
+	struct buffer_head *bh, *bh2;
 
-	retval = 0;
 	bh = sb_bread(sb, i_block);
 	if(!bh){
 		retval = -EIO;
-		goto end;
+		return retval;
 	}
 
-	// 用于遍历dx_root和dx_node计数使用
-	unsigned tmp, tmp2;
 	root = (struct dx_root *)bh->b_data;
 	indirect_levels = root->info.indirect_levels;
 	entries = root->entries;
+	
+	// 存储遍历信息
+	struct dx_frame frames[indirect_levels + 1], *frame;
+	
+
+	int i;
+
+	retval = 0;
+	
+	// 用于遍历dx_root和dx_node计数使用
+	unsigned tmp, tmp2;
+	
 
 	// 获取dx_root层的entries count
 	count = dx_get_count(entries);
@@ -68,7 +73,7 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 		bh = sb_bread(sb, bno);
 		if(!bh){
 			retval = -EIO;
-			goto end;
+			return retval;
 		}
 
 		frames[0].entries = root->entries;

@@ -34,12 +34,8 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	unsigned indirect_levels, count, count2, count3;
 	// cur_level为当前所处的level
 	int retval, cur_level;
-	// 存储遍历信息
-	struct del_dx_frame frames[indirect_levels + 1], *frame;
 
 
-	// retval赋值
-	retval = 0;
 	// i_block
 	i_block = xi->i_block[0];
 	// 获取dx_root
@@ -47,15 +43,23 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	if (!bh)
 	{
 		retval = -EIO;
-		goto end;
+		return retval;
 	}
+	root = (struct dx_root *)bh->b_data;
+	indirect_levels = root->info.indirect_levels;
+	entries = root->entries;
+
+	// 存储遍历信息
+	struct del_dx_frame frames[indirect_levels + 1], *frame;
+
+
+	// retval赋值
+	retval = 0;
+	
 
 	// 用于遍历dx_root和dx_node计数使用
 	unsigned tmp, tmp2;
 
-	root = (struct dx_root *)bh->b_data;
-	indirect_levels = root->info.indirect_levels;
-	entries = root->entries;
 	
 	// 获取dx_root层的entries count
 	count = dx_get_count(entries);
@@ -1001,8 +1005,9 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 	}
 
 	retval = add_dirent_to_buf(dentry, inode, NULL, bh);
+	printk("add_dirent_to_buf retval: %d\n", retval);
 	// 插入成功
-
+	
 	if (retval == -EEXIST)
 		printk("same name of dentry has been existed\n");
 	else if (retval == -ENOSPC)

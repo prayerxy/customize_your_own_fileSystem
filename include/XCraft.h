@@ -120,7 +120,7 @@ struct XCraft_group_desc{
 
 
 //最开始建树的时候，10个以上分类成哈希树
-#define XCRAFT_dentry_LIMIT 10
+#define XCRAFT_dentry_LIMIT 20
 
 // hash树的层数
 #define XCRAFT_HTREE_LEVEL 3
