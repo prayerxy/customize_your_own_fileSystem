@@ -326,9 +326,14 @@ static struct XCraft_dir_entry *dx_pack_dirents(struct inode *dir, char *base, u
 
 	while((char*) de< base + blocksize){
 		next = (struct XCraft_dir_entry*)((char*)de + le16_to_cpu(de->rec_len));
+		if(de->rec_len == 0){
+			printk("rec_len is 0\n");
+			break;
+		}
 		if(de->inode && de->name_len){
 			rec_len=le16_to_cpu(de->rec_len);
 			if(de>to){
+				printk("pack file_name: %s\n", de->name);
 				memmove(to,de,rec_len);
 				// 此处的de应该要重置
 				memset(de, 0, rec_len);
@@ -338,10 +343,6 @@ static struct XCraft_dir_entry *dx_pack_dirents(struct inode *dir, char *base, u
 			to = (struct XCraft_dir_entry*)((char*) to + rec_len);
 		}
 		de = next;
-		if(de->rec_len == 0){
-			printk("rec_len is 0\n");
-			break;
-		}
 	}
 	// 最后to处应该全部置0
 	memset(to, 0, sizeof(struct XCraft_dir_entry));
@@ -521,7 +522,7 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 		split = count/2;
 	//split从1开始是个数 map指向第0个
 	for(i=0;i<count;i++){
-		printk("map[%d].hash=%x\n",i,map[i].hash);
+		printk("map[%d].hash=%x  offs:%d\n",i,map[i].hash,map[i].offs);
 	}
 	hash2=map[split].hash;
 	continued = hash2 == map[split - 1].hash;
