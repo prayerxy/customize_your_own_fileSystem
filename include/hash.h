@@ -24,9 +24,6 @@ static __u32 dx_hack_hash_unsigned(const char *name, int len)
 // name:文件名 len:文件名长度  hinfo:hash值(储存hash值的结构体)
 static int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hinfo){
 	__u32 hash;
-	__u32 minor_hash = 0;
-	const char *p;
-	int i;
 
 	if(hinfo->hash_version != XCRAFT_HTREE_VERSION){
 		hinfo->hash = 0;
@@ -45,6 +42,7 @@ static inline uint32_t dx_node_limit(void)
 {
 	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(__le16))  / sizeof(struct dx_entry);
 	return limit;
+	// return 3;
 }
 
 static inline void dx_set_block(struct dx_entry *entry, uint32_t value)
@@ -71,6 +69,7 @@ static inline uint32_t dx_root_limit(void)
 {
 	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(struct dx_root_info)) / sizeof(struct dx_entry);
 	return limit;
+	// return 3;
 }
 
 static inline void dx_set_count(struct dx_entry *entries, unsigned value)
@@ -155,6 +154,28 @@ static void dx_release(struct dx_frame *frames)
 		frames[i].bh = NULL;
 	}
 }
+
+// 用于delete_hash_block
+static void dx_del_release(struct del_dx_frame *frames)
+{
+	struct dx_root_info *info;
+	int i;
+	unsigned int indirect_levels;
+
+	if (frames[0].bh == NULL)
+		return;
+
+	info = &((struct dx_root *)frames[0].bh->b_data)->info;
+	/* save local copy, "info" may be freed after brelse() */
+	indirect_levels = info->indirect_levels;
+	for (i = 0; i <= indirect_levels; i++) {
+		if (frames[i].bh == NULL)
+			break;
+		brelse(frames[i].bh);
+		frames[i].bh = NULL;
+	}
+}
+
 
 static int XCraft_set_inode_flag(struct inode*dir,uint32_t flag){
 	// 获取inode_info
@@ -268,11 +289,12 @@ dx_move_dirents(struct inode *dir, char *from, char *to,
 		unsigned blocksize)
 {
 	unsigned rec_len=0;
-	while(count--){
+	char *to_begin = to;
+	while(count){
 		//找到与to里面对应的from的目录项
 		struct XCraft_dir_entry *de=(struct XCraft_dir_entry*)(from+(map->offs<<2));
 		rec_len=le16_to_cpu(de->rec_len);
-
+		printk("move file_name: %s\n", de->name);
 		memcpy(to,de,rec_len);
 		//除了rec_len的部分，其他部分清零
 		de->inode=0;
@@ -284,8 +306,11 @@ dx_move_dirents(struct inode *dir, char *from, char *to,
 		//更新map
 		map++;
 		to+=rec_len;
+		count--;
 	}
-	return (struct XCraft_dir_entry*) (to-rec_len);
+	// 新块后面有map_entry类型的东西，我们将其全部置0
+	memset(to, 0, to_begin + blocksize - to);
+	return (struct XCraft_dir_entry*) to;
 }
 
 
@@ -307,15 +332,20 @@ static struct XCraft_dir_entry *dx_pack_dirents(struct inode *dir, char *base, u
 		}
 		if(de->inode && de->name_len){
 			rec_len=le16_to_cpu(de->rec_len);
-			if(de>to)
+			if(de>to){
 				memmove(to,de,rec_len);
+				// 此处的de应该要重置
+				memset(de, 0, rec_len);
+			}
 			to->rec_len = cpu_to_le16(rec_len);
 			prev = to;
 			to = (struct XCraft_dir_entry*)((char*) to + rec_len);
 		}
 		de = next;
 	}
-	return prev;
+	// 最后to处应该全部置0
+	memset(to, 0, sizeof(struct XCraft_dir_entry));
+	return to;
 }
 
 static void dx_insert_block(struct dx_frame *frame,uint32_t hash,uint32_t bno)
@@ -507,8 +537,8 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 	// 统一设置两个块最后一个目录项的rec_len字段
 	de->rec_len = cpu_to_le16(sizeof(struct XCraft_dir_entry));
 	de2->rec_len = cpu_to_le16(sizeof(struct XCraft_dir_entry));
-	// 判断条件需要注意
 	
+	// 判断条件需要注意
 	if((continued && hinfo->hash>hash2) || (!continued && hinfo->hash>=hash2)){
 		swap(*bh, bh2);
 		de = de2;
@@ -542,8 +572,6 @@ static int XCraft_make_hash_tree(struct dentry *dentry,
 	//最后将新的目录项插入到目录中 完成de->inode的赋值
 	// 获取超级块
 	struct super_block * sb = dir->i_sb;
-	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
-
 	struct dx_root	*root;
 	struct dx_frame frames[XCRAFT_HTREE_LEVEL],*frame;
 	struct dx_entry *entries;

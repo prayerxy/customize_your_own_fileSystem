@@ -227,9 +227,18 @@ static void XCraft_put_super(struct super_block *sb){
 static int XCraft_sync_fs(struct super_block *sb, int wait){
     struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
     struct XCraft_superblock *ssb=sb_info->s_super;
-
-    
     struct  XCraft_superblock *disk_sb;
+    struct buffer_head *bh1;
+    struct buffer_head *bh2;
+    struct buffer_head *bh3;
+    struct XCraft_group_desc *disk_gdb ;
+    int i;
+
+    uint32_t bfree_blo;
+
+    // 获取位图开始位置
+    uint32_t bg_inode_bitmap;
+    uint32_t bg_block_bitmap;
 
     disk_sb=(struct XCraft_superblock*)sb_info->s_sbh->b_data;
 
@@ -250,11 +259,7 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
         sync_dirty_buffer(sb_info->s_sbh);
 
      // 回写块组描述符
-    struct buffer_head *bh1;
-    struct buffer_head *bh2;
-    struct buffer_head *bh3;
-    struct XCraft_group_desc *disk_gdb ;
-    int i=0;
+    
     //s_gdb_count是组描述符占多少个块
     for(i=0;i<sb_info->s_gdb_count;i++){
         mark_buffer_dirty(sb_info->s_group_desc[i]);
@@ -265,9 +270,9 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
 
     // 回写inode位图和bitmap位图
     for(i=0;i<sb_info->s_groups_count;i++){
-        struct XCraft_group_desc *disk_gdb = get_group_desc2(sb_info,i);
-        uint32_t bg_inode_bitmap= le32_to_cpu(disk_gdb->bg_inode_bitmap);
-        uint32_t bg_block_bitmap = le32_to_cpu(disk_gdb->bg_block_bitmap);
+        disk_gdb = get_group_desc2(sb_info,i);
+        bg_inode_bitmap= le32_to_cpu(disk_gdb->bg_inode_bitmap);
+        bg_block_bitmap = le32_to_cpu(disk_gdb->bg_block_bitmap);
         // inode位图只有一块
         bh1 = sb_bread(sb, bg_inode_bitmap);
         if(!bh1)
@@ -290,7 +295,7 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
             sync_dirty_buffer(bh2);
         brelse(bh2);
         
-        uint32_t bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32_to_cpu(disk_gdb->bg_nr_blocks));
+        bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(le32_to_cpu(disk_gdb->bg_nr_blocks));
         if(bfree_blo>1){
             bh3 = sb_bread(sb, bg_block_bitmap+1);
             if(!bh3)
@@ -340,6 +345,15 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     struct XCraft_inode_info *root_inode_info = NULL;
     int ret;
     int i;
+    struct XCraft_superblock *disk_sb_tmp;
+    unsigned long gdb_count = 0;
+
+    // 获取块组描述符
+    struct buffer_head** group_desc;
+
+    uint32_t bfree_blo;
+
+    unsigned int root_iblock;
     ret = 0;
 
     // init sb
@@ -352,7 +366,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     bh = sb_bread(sb, 0);
     if(!bh)
         return -EIO;
-    struct XCraft_superblock *disk_sb_tmp = (struct XCraft_superblock *)bh->b_data;
+    disk_sb_tmp = (struct XCraft_superblock *)bh->b_data;
     // memcpy((char *)disk_sb, (char *)disk_sb_tmp, sizeof(struct XCraft_superblock));
     disk_sb->s_inodes_count = disk_sb_tmp->s_inodes_count;
     disk_sb->s_blocks_count = disk_sb_tmp->s_blocks_count;
@@ -399,16 +413,14 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     sb_info->s_hash_seed[3] = 0xb8fb094d;
 
     // get s_gdb_count and s_group_desc
-    unsigned long gdb_count = 0;
+    
     gdb_count= ceil_div(sb_info->s_groups_count, sb_info->s_desc_per_block);
-    struct buffer_head** group_desc = kzalloc(sizeof(struct buffer_head*) * XCRAFT_DESC_LIMIT_blo, GFP_KERNEL);
+    group_desc = kzalloc(sizeof(struct buffer_head*) * XCRAFT_DESC_LIMIT_blo, GFP_KERNEL);
     
     sb_info->s_ibmap_info = kzalloc(sizeof(struct XCraft_ibmap_info *) * sb_info->s_groups_count, GFP_KERNEL);
     sb_info->s_ibmap_info[0]=kzalloc(sizeof(struct XCraft_ibmap_info),GFP_KERNEL);
     sb_info->s_ibmap_info[0]->ifree_bitmap=kzalloc(XCRAFT_BLOCK_SIZE,GFP_KERNEL);
 
-
-    uint32_t bfree_blo;
 
     if(sb_info->s_groups_count==1){
         bfree_blo=XCRAFT_BFREE_PER_GROUP_BLO(sb_info->s_last_group_blocks);
@@ -493,7 +505,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     }
 
     root_inode_info = XCRAFT_I(root_inode);
-    unsigned int root_iblock = root_inode_info->i_block[0];
+    root_iblock = root_inode_info->i_block[0];
     bh = sb_bread(sb, root_iblock);
     if(!bh){
         ret = -EIO;
@@ -526,7 +538,6 @@ out_free_group_desc:
     for(i=0;i < XCRAFT_DESC_LIMIT_blo; i++)
         brelse(group_desc[i]);
     kfree(group_desc);
-out_sb_info:
     kfree(sb_info);
 out_brelse:
     brelse(bh);

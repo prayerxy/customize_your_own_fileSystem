@@ -13,8 +13,8 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
-	struct dx_entry *entries, *entries2, *entries3;
-	unsigned indirect_levels, count, count2, count3;
+	struct dx_entry *entries = NULL, *entries2 = NULL, *entries3 = NULL;
+	unsigned indirect_levels = 0, count = 0, count2 = 0, count3 = 0;
 	// cur_level 为当前所处的level
 	int retval, cur_level;
 	// dx_root
@@ -36,7 +36,7 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 	
 	// 存储遍历信息
 	struct dx_frame frames[indirect_levels + 1], *frame;
-	
+	memset(frames, 0, sizeof(frames));
 
 	int i;
 
@@ -56,17 +56,13 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 	cur_level = 0;
 	// 物理块号存储
 	unsigned int bno, bno2, bno_tmp, bno3;
-
-	
 	struct buffer_head *bh_tmp, *bh3;
-	int flag = 1;
 	int eno_count = 0;
 
 	// 遍历目录项时使用
 	struct XCraft_dir_entry* de;
 	unsigned short reclen;
 	char *top;
-
 	while(tmp<count){
 		// 从entries获取block
 		bno = le32_to_cpu(entries->block);
@@ -75,7 +71,6 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 			retval = -EIO;
 			return retval;
 		}
-
 		frames[0].entries = root->entries;
 		frames[0].at = entries;
 
@@ -90,6 +85,7 @@ again:
 back:
 			while(tmp2<count2){
 				bno_tmp = le32_to_cpu(entries2->block);
+				bh_tmp = sb_bread(sb, bno_tmp);
 				if(!bh_tmp){
 					retval = -EIO;
 					goto out_bh;
@@ -113,7 +109,7 @@ back:
 				entries3 = node->entries;
 				count3 = dx_get_count(entries3);
 				for(i=0;i<count3;i++){
-					entries3 = entries3 + i;
+					entries3 += 1;
 					bno3 = le32_to_cpu(entries3->block);
 					bh3 = sb_bread(sb, bno3);
 					if(!bh3){
@@ -121,15 +117,15 @@ back:
 						goto out_bh;
 					}
 					reclen = sizeof(struct XCraft_dir_entry);
-					struct XCraft_dir_entry *de = (struct XCraft_dir_entry *)bh3->b_data;
-					char *top = bh3->b_data + sb->s_blocksize - reclen;
+					de = (struct XCraft_dir_entry *)bh3->b_data;
+					top = bh3->b_data + sb->s_blocksize - reclen;
 					while((char *)de <= top){
 					    if(!de->inode)
 							break;
 						if(eno_count>=eno){
 							if(de->inode && !dir_emit(ctx, de->name, XCRAFT_NAME_LEN, le32_to_cpu(de->inode),
                                       DT_UNKNOWN))
-							break;
+								break;
 							ctx->pos++;
 						}
 						eno_count++;
@@ -140,14 +136,13 @@ back:
 				}
 				brelse(bh_tmp);
 				tmp2+=1;
-				entries2 = entries2 + 1;
+				entries2 += 1;
 			}
 			brelse(bh2);
 			cur_level-=1;
-			if(!cur_level)
-				goto root_again;
-
-			while(flag){
+			// 我们向前方进行回溯
+			while(cur_level>0){
+				// 保证我们下面遍历的都是dx_node类型
 				bh2 = frame->bh;
 				tmp2 = (frame->at) - (frame->entries);
 				entries2 = frame->at;
@@ -159,18 +154,43 @@ back:
 					frame = frame - 1;
 					break;
 				}
+				// tmp2 = count2-1
 				brelse(bh2);
 				frame = frame - 1;
 				cur_level-=1;
 			}
+			// cur_level为0说明此时我们去遍历dx_root
+			if(!cur_level)
+				goto root_again;
+			// 否则此时cur_level不为0, 说明在此前跳出, 继续遍历即可
 			goto back;
+		}
+
+		// 此时dx_root层已经是最后一层，直接搜索bh对应的磁盘块
+		reclen = sizeof(struct XCraft_dir_entry);
+		de = (struct XCraft_dir_entry *)bh->b_data;
+		top = bh->b_data + sb->s_blocksize - reclen;
+		while((char *)de <= top){
+		    if(!de->inode)
+				break;
+			if(eno_count>=eno){
+			    if(de->inode && !dir_emit(ctx, de->name, XCRAFT_NAME_LEN, le32_to_cpu(de->inode),DT_UNKNOWN))
+					break;
+				ctx->pos++;
+			}
+			eno_count++;
+			reclen = le16_to_cpu(de->rec_len);
+			de = (struct XCraft_dir_entry *)((char *)de + reclen);
 		}
 root_again:
 		entries = entries + 1;
 		tmp++;
 		tmp2 = 0;
+		brelse(bh);
 	}
-	brelse(frames[0].bh);
+	
+	dx_release(frames);
+	return retval;
 out_bh:
 	brelse(bh);
 end:
@@ -199,8 +219,6 @@ static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 	if(!dir_emit_dots(dir, ctx))
 		return 0;
 	
-	// ctx->pos确定是第几个目录项
-	// ctx->pos从0开始
 
 	eno = ctx->pos - 2;
 	// 遍历目录项 分哈希树和不是哈希树两种情况
