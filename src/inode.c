@@ -43,9 +43,9 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	unsigned tmp, tmp2;
 
 	// 物理块号存储
-	unsigned int bno, bno2, bno_tmp, bno3;
+	unsigned int bno, bno2, bno_tmp;
 
-	struct buffer_head *bh_tmp, *bh3;
+	struct buffer_head *bh_tmp;
 
 	// 获取i_block
 	i_block = xi->i_block[0];
@@ -125,28 +125,12 @@ back:
 					bno2 = bno_tmp;
 					goto again;
 				}
+
 				// 否则就是已经在最后一级
-				// 对其中的dx_entry进行遍历并释放其块
-				node = (struct dx_node *)bh_tmp->b_data;
-				entries3 = node->entries;
-				count3 = dx_get_count(entries3);
-				for(i=0;i<count3;i++){
-					entries3 += 1;
-					bno3 = le32_to_cpu(entries3->block);
-					bh3 = sb_bread(sb, bno3);
-					if(!bh3){
-						retval = -EIO;
-						goto out_bh;
-					}
-					memset(bh3->b_data, 0, XCRAFT_BLOCK_SIZE);
-					mark_buffer_dirty(bh3);
-					put_blocks(sb_info, bno3, 1);
-					brelse(bh3);
-				}
+				// bh_tmp直接对应磁盘块
 				memset(bh_tmp->b_data, 0, XCRAFT_BLOCK_SIZE);
 				mark_buffer_dirty(bh_tmp);
 				put_blocks(sb_info, bno_tmp, 1);
-				brelse(bh_tmp);
 				tmp2+=1;
 				entries2 += 1;
 			}
@@ -155,7 +139,6 @@ back:
 			memset(bh2->b_data, 0, XCRAFT_BLOCK_SIZE);
 			mark_buffer_dirty(bh2);
 			put_blocks(sb_info, bno2, 1);
-			brelse(bh2);
 			cur_level-=1;
 
 			// 确定回退到的确定位置
@@ -176,7 +159,6 @@ back:
 				memset(bh2->b_data, 0, XCRAFT_BLOCK_SIZE);
 				mark_buffer_dirty(bh2);
 				put_blocks(sb_info, bno2, 1);
-				brelse(bh2);
 				frame = frame - 1;
 				cur_level-=1;
 			}
@@ -197,7 +179,6 @@ root_again:
 		entries = entries + 1;
 		tmp++;
 		tmp2 = 0;
-		brelse(bh);
 	}
 
 	// 最后释放dx_root所在的块
@@ -210,7 +191,8 @@ root_again:
 	return retval;
 
 out_bh:
-	brelse(bh);
+	if(bh)
+		brelse(bh);
 end:
 	return retval;
 }
@@ -881,6 +863,7 @@ again:
 			{
 				// 此时已经找到位置了
 				add_level = 0;
+				restart = 1;
 				break;
 			}
 			frame--;
@@ -914,9 +897,9 @@ again:
 		// 两种情况:
 		// 需要加级数 不需要加级数
 		// 不需要加级数的直接在前一层插入dx_entry
-
 		if (!add_level)
 		{
+			printk("不需要添加级数\n");
 			icount1 = icount / 2, icount2 = icount - icount1;
 			// 分裂位置的hash
 			hash2 = dx_get_hash(entries + icount1);
@@ -934,8 +917,8 @@ again:
 				swap(frame->bh, bh2);
 			}
 
-			dx_insert_block((frame - 1), hash2, newblock);
-			printk("now dx_entry count: %d\n", dx_get_count((frame-1)->entries));
+			dx_insert_block(frame - 1, hash2, newblock);
+			// printk("now dx_entry count: %d\n", dx_get_count((frame-1)->entries));
 			// 此时我们需要mark_buffer_dirty，分裂的两个块，添加dx_entry的块
 			mark_buffer_dirty(frame->bh);
 			mark_buffer_dirty((frame - 1)->bh);
@@ -969,14 +952,12 @@ again:
 			goto cleanup;
 		}
 	}
-
 	// dx_entry的分裂已经完成
 	de = do_split(dir, &bh, frame, &hinfo);
 	if (IS_ERR(de)){
 		err = PTR_ERR(de);
 		goto cleanup;
 	}
-
 	// 重新插入
 	err = add_dirent_to_buf(dentry, inode, de, bh);
 

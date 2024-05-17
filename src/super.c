@@ -130,11 +130,7 @@ int get_block_group_shift(struct XCraft_superblock_info *sb_info, uint32_t block
 
 
 
-
-
-
 // write_inode
-
 int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
     struct XCraft_inode_info *xi = XCRAFT_I(inode);

@@ -40,9 +40,9 @@ static int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hi
 
 static inline uint32_t dx_node_limit(void)
 {
-	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(__le16))  / sizeof(struct dx_entry);
-	return limit;
-	// return 3;
+	// unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(__le16))  / sizeof(struct dx_entry);
+	// return limit;
+	return 3;
 }
 
 static inline void dx_set_block(struct dx_entry *entry, uint32_t value)
@@ -67,9 +67,9 @@ static inline uint32_t dx_get_hash(struct dx_entry *entry)
 
 static inline uint32_t dx_root_limit(void)
 {
-	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(struct dx_root_info)) / sizeof(struct dx_entry);
-	return limit;
-	// return 3;
+	// unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(struct dx_root_info)) / sizeof(struct dx_entry);
+	// return limit;
+	return 3;
 }
 
 static inline void dx_set_count(struct dx_entry *entries, unsigned value)
@@ -333,7 +333,6 @@ static struct XCraft_dir_entry *dx_pack_dirents(struct inode *dir, char *base, u
 		if(de->inode && de->name_len){
 			rec_len=le16_to_cpu(de->rec_len);
 			if(de>to){
-				printk("pack file_name: %s\n", de->name);
 				memmove(to,de,rec_len);
 				// 此处的de应该要重置
 				memset(de, 0, rec_len);
@@ -362,8 +361,8 @@ static void dx_insert_block(struct dx_frame *frame,uint32_t hash,uint32_t bno)
 	dx_set_hash(new,hash);
 	dx_set_block(new,bno);
 	dx_set_count(entries, count + 1);
-	printk("dx_entries_count:%d\n",dx_get_count(entries));
-	printk("dx_entries[1]_hash:%x",dx_get_hash(entries+1));
+	// printk("dx_entries_count:%d\n",dx_get_count(entries));
+	// printk("dx_entries[1]_hash:%x",dx_get_hash(entries+1));
 
 }
 
@@ -522,7 +521,7 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 		split = count/2;
 	//split从1开始是个数 map指向第0个
 	for(i=0;i<count;i++){
-		printk("map[%d].hash=%x  offs:%d\n",i,map[i].hash,map[i].offs);
+		printk("map[%d].hash=%x\n",i,map[i].hash);
 	}
 	hash2=map[split].hash;
 	continued = hash2 == map[split - 1].hash;

@@ -10,6 +10,7 @@
 // eno是除.和..之外第几个目录项开始遍历搜索 eno从0开始
 // i_block = xi->i_block[0]
 static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int eno, unsigned int i_block){
+	printk("begin dx_readdir!\n");
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
@@ -27,6 +28,7 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 	bh = sb_bread(sb, i_block);
 	if(!bh){
 		retval = -EIO;
+		printk("pos1\n");
 		return retval;
 	}
 
@@ -55,8 +57,8 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 	tmp = tmp2 = 0;
 	cur_level = 0;
 	// 物理块号存储
-	unsigned int bno, bno2, bno_tmp, bno3;
-	struct buffer_head *bh_tmp, *bh3;
+	unsigned int bno, bno2, bno_tmp;
+	struct buffer_head *bh_tmp;
 	int eno_count = 0;
 
 	// 遍历目录项时使用
@@ -79,7 +81,7 @@ static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int e
 		if(cur_level<indirect_levels){
 again:
 			cur_level+=1;
-			node = (struct dx_node *)bh->b_data;
+			node = (struct dx_node *)bh2->b_data;
 			entries2 = node->entries;
 			count2 = dx_get_count(entries2);
 back:
@@ -103,42 +105,26 @@ back:
 					goto again;
 				}
 
-				// 否则在最后一级dx_entry
-				// 对其中的dx_entry进行遍历并释放其块
-				node = (struct dx_node *)bh_tmp->b_data;
-				entries3 = node->entries;
-				count3 = dx_get_count(entries3);
-				for(i=0;i<count3;i++){
-					entries3 += 1;
-					bno3 = le32_to_cpu(entries3->block);
-					bh3 = sb_bread(sb, bno3);
-					if(!bh3){
-						retval = -EIO;
-						goto out_bh;
-					}
-					reclen = sizeof(struct XCraft_dir_entry);
-					de = (struct XCraft_dir_entry *)bh3->b_data;
-					top = bh3->b_data + sb->s_blocksize - reclen;
-					while((char *)de <= top){
-					    if(!de->inode)
+				// 否则此时在最后一级dx_entry
+				// bh_tmp直接对应磁盘块
+				reclen = sizeof(struct XCraft_dir_entry);
+				de = (struct XCraft_dir_entry *)bh_tmp->b_data;
+				top = bh_tmp->b_data + sb->s_blocksize - sizeof(struct XCraft_dir_entry);
+				while((char *)de<=top){
+					if(!de->inode)
+						break;
+					if(eno_count>=eno){
+						if(de->inode && !dir_emit(ctx, de->name, XCRAFT_NAME_LEN, le32_to_cpu(de->inode), DT_UNKNOWN))
 							break;
-						if(eno_count>=eno){
-							if(de->inode && !dir_emit(ctx, de->name, XCRAFT_NAME_LEN, le32_to_cpu(de->inode),
-                                      DT_UNKNOWN))
-								break;
-							ctx->pos++;
-						}
-						eno_count++;
-						reclen = le16_to_cpu(de->rec_len);
-						de = (struct XCraft_dir_entry *)((char *)de + reclen);
+						ctx->pos++;
 					}
-					brelse(bh3);
+					eno_count++;
+					reclen = le16_to_cpu(de->rec_len);
+					de = (struct XCraft_dir_entry *)((char *)de + reclen);
 				}
-				brelse(bh_tmp);
 				tmp2+=1;
 				entries2 += 1;
 			}
-			brelse(bh2);
 			cur_level-=1;
 			// 我们向前方进行回溯
 			while(cur_level>0){
@@ -154,8 +140,6 @@ back:
 					frame = frame - 1;
 					break;
 				}
-				// tmp2 = count2-1
-				brelse(bh2);
 				frame = frame - 1;
 				cur_level-=1;
 			}
@@ -186,13 +170,14 @@ root_again:
 		entries = entries + 1;
 		tmp++;
 		tmp2 = 0;
-		brelse(bh);
 	}
 	
 	dx_release(frames);
+	printk("over dx_readdir!\n");
 	return retval;
 out_bh:
-	brelse(bh);
+	if(bh)
+		brelse(bh);
 end:
 	return retval;
 }
@@ -224,9 +209,11 @@ static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 	// 遍历目录项 分哈希树和不是哈希树两种情况
 	i_block = xi->i_block[0];
 
-	if(XCraft_INODE_ISHASH_TREE(xi->i_flags))
+	if(XCraft_INODE_ISHASH_TREE(xi->i_flags)){
 		// 哈希树情况，遍历hash树查找目录项
 		ret = XCraft_dx_readdir(inode, ctx, eno, i_block);
+		printk("XCraft_dx_readdir ret: %d\n",ret);
+	}
 	else{
 		int count = 0;
 		bh = sb_bread(sb, i_block);
