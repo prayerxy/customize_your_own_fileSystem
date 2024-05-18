@@ -1737,18 +1737,16 @@ static int XCraft_rename(struct inode *old_dir,
 						 unsigned int flags)
 #endif
 {
+	printk("begin rename\n");
 	struct XCraft_inode_info *old_dir_info = XCRAFT_I(old_dir);
 	struct XCraft_inode_info *new_dir_info = XCRAFT_I(new_dir);
 	// old_dentry中关联的inode和new_dentry中关联的inode
-	struct inode *old_inode;
+	struct inode *old_inode = NULL;
 
 	// 由old_dentry找到的目录项结构
-	struct XCraft_dir_entry *old_de, *new_de;
+	struct XCraft_dir_entry *old_de = NULL, *new_de = NULL;
 	// 后面使用find_entry作为结果返回
-	struct buffer_head *old_bh, *new_bh;
-
-	old_bh = new_bh = NULL;
-	old_de = new_de = NULL;
+	struct buffer_head *old_bh = NULL, *new_bh = NULL;
 
 	// 最终的返回字段
 	int retval;
@@ -1768,7 +1766,7 @@ static int XCraft_rename(struct inode *old_dir,
 
 	old_bh = XCraft_find_entry(old_dir, &old_dentry->d_name, &old_de);
 
-	old_inode = old_dentry->d_inode;
+	old_inode = d_inode(old_dentry);
 	retval = -ENOENT;
 
 	// find_entry没找到，或者找到的inode的ino和old_inode的ino不一样
@@ -1828,12 +1826,10 @@ static int XCraft_rename(struct inode *old_dir,
 		inc_nlink(new_dir);
 	mark_inode_dirty(new_dir);
 
-	// 添加成功之后将new_dentry与old_inode关联起来
-	d_instantiate(new_dentry, old_inode);
-
 	// old_inode我们进行了访问,更新时间字段
 	old_inode->i_ctime = current_time(old_inode);
 	mark_inode_dirty(old_inode);
+	printk("rename ok!\n");
 
 end_rename:
 	brelse(old_bh);

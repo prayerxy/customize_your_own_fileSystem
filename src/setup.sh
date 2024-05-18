@@ -244,6 +244,23 @@ rm -d dir92
 rm 1.txt
 cd ..
 rm -d dir0
+
+mkdir -p dir1
+cd dir1
+touch 1.txt
+ls
+cd ..
+mkdir -p dir2
+mv /mnt/test/dir1/1.txt /mnt/test/dir2/
+cd dir1
+ls
+cd ..
+cd dir2
+ls
+rm 1.txt
+cd ..
+rm -d dir1
+rm -d dir2
 EOF
 
 # 卸载测试镜像
