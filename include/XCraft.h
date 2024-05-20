@@ -25,7 +25,7 @@
 #define XCraft_BG_INODE_INIT	0x0001 /* Inode table/bitmap not in use */
 #define XCraft_BG_BLOCK_INIT	0x0002 /* Block bitmap not in use */
 #define Xcraft_BG_INODE_ZEROED	0x0004 /* On-disk itable initialized to zero */
-#define XCraft_BG_ISINIT(flag) (flag&XCraft_BG_INODE_INIT)&&(flag&XCraft_BG_BLOCK_INIT)
+#define XCraft_BG_ISINIT(flag) ((flag&XCraft_BG_INODE_INIT)&&(flag&XCraft_BG_BLOCK_INIT))
 // inode flags
 #define XCraft_INODE_HASH_TREE 0x0001
 #define XCraft_INODE_ISHASH_TREE(flag) flag & XCraft_INODE_HASH_TREE
