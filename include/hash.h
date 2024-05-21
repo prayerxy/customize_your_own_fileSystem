@@ -637,13 +637,12 @@ static int XCraft_make_hash_tree(struct dentry *dentry,
 	retval = add_dirent_to_buf(dentry,inode,de,bh2);
 
 out_frames:
-	if(retval)
-		mark_inode_dirty(dir);
+	mark_inode_dirty(dir);
 	mark_buffer_dirty(bh);
 	mark_buffer_dirty(bh2);
 	dx_release(frames);
 	brelse(bh2);
-    return 0;
+    return retval;
 }
 
 

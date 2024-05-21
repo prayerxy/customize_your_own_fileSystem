@@ -697,7 +697,6 @@ dx_probe(struct qstr *entry, struct inode *dir,
 
 	// 由indirect_levels字段可以判断我们的哈希树有几级
 	// 我们需要通过其与我们自己定义的哈希树层级进行比较
-	// indirect字段如果大于1不合理，
 	indirect = root->info.indirect_levels;
 	if (indirect >= XCRAFT_HTREE_LEVEL)
 	{
