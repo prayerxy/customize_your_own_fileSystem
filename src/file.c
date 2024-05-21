@@ -6,9 +6,9 @@
 #include <linux/module.h>
 #include <linux/mpage.h>
 
-#include "../include/XCraft.h"
-#include "../include/bitmap.h"
-#include "../include/hash.h"
+#include "XCraft.h"
+#include "bitmap.h"
+#include "hash.h"
 
 // 获取文件最大大小
 unsigned int XCraft_get_max_filesize(void){

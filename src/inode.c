@@ -5,9 +5,9 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include "../include/XCraft.h"
-#include "../include/bitmap.h"
-#include "../include/hash.h"
+#include "XCraft.h"
+#include "bitmap.h"
+#include "hash.h"
 // #include <endian.h>
 // #include <stdint.h>
 // #include <stdio.h>

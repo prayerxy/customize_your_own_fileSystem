@@ -6,7 +6,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/statfs.h>
-#include "../include/XCraft.h"
+#include "XCraft.h"
 
 
 // slab cache for XCraft_inode_info

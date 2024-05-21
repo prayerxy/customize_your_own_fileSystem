@@ -9,7 +9,7 @@
 #include <linux/fs.h>
 #include <unistd.h>
 #include <errno.h>
-#include "../include/XCraft.h"
+#include "XCraft.h"
 
 struct superblock_padding{
     struct XCraft_superblock xcraft_sb;

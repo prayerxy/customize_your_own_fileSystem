@@ -5,8 +5,8 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include "../include/XCraft.h"
-#include "../include/hash.h"
+#include "XCraft.h"
+#include "hash.h"
 // eno是除.和..之外第几个目录项开始遍历搜索 eno从0开始
 // i_block = xi->i_block[0]
 static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int eno, unsigned int i_block){
