@@ -9,11 +9,13 @@ sleep 1
 
 # 加载 kernel module
 echo "开始加载 kernel module..."
+cd build
 sudo insmod xcraft.ko
 echo "kernel module 加载完成！"
 echo -e "\n"
 sleep 1
 
+cd ..
 # 创建测试目录和测试镜像
 echo "开始创建测试目录和测试镜像..."
 sudo mkdir -p /mnt/test
@@ -24,9 +26,10 @@ echo "镜像大小: 256MB"
 echo -e "\n"
 sleep 1
 
+
 # 使用mkfs.XCraft工具创建文件系统
 echo "开始使用 mkfs.XCraft 工具创建文件系统..."
-./mkfs.XCraft test.img
+./build/mkfs.XCraft test.img
 echo "文件系统test.img创建完成! "
 echo -e "\n"
 sleep 1
