@@ -1,36 +1,35 @@
-# oscomp_learning
-linux设计文件系统 文档要求：
+## XCRAFT_FS
 
-1. 目标描述
-2. 比赛题目分析和相关资料调研
-3. 系统框架设计
-4. 开发计划
-5. 比赛过程中的重要进展
-6. 系统测试情况
-7. 遇到的主要问题和解决方法
-8. 分工和协作
-9. 提交仓库目录和文件描述
-10. 比赛收获
+我们来自南开大学的队伍PRAY4U
+
+选题题目是`proj209-自己设计一个Linux 文件系统并实现文件和目录读写操作`
+
+| 小组成员 | 谢畅、张景瑞 |
+| -------- | ------------ |
+| 指导老师 | 宫晓利、张金 |
 
 
-[题目](https://github.com/oscomp/proj209-custom-filesystem)	
 
-[文档提交及建议](https://shimo.im/docs/vVqRVbmLlaCXKoqy/read)
+### 项目的结构说明
 
-[参考仓库](https://gitlab.eduxiji.net/educg-group-17066-1466467?filter=%E5%8D%97%E5%BC%80%E5%A4%A7%E5%AD%A6)
+- data_about_learning是准备阶段完成的学习记录
+- 其余文件夹是项目结构
+  - include是头文件夹
+  - src是项目源文件夹
+  - 外部makefile保证运行make
+  - setup.sh是运行测试脚本
 
-[Ext4 Disk Layout,Part1](https://blogs.oracle.com/linux/post/understanding-ext4-disk-layout-part-1)
-      
-[Ext4 Disk Layout,Part2](https://blogs.oracle.com/linux/post/understanding-ext4-disk-layout-part-2)
+### 运行说明
 
-[Linux驱动1-模块化编程](https://mp.weixin.qq.com/s?__biz=MzUxMjEyNDgyNw==&amp;mid=2247486089&amp;idx=2&amp;sn=68a2489bf69620a7bc78a35cfce13709&amp;chksm=f968787dce1ff16b4a3ab2e720589ad13c57de40e761e5ab189cfea63d7068b7dd86c769623d&amp;token=1841565883&amp;lang=zh_CN#rd
-)
+- 方法1：直接运行脚本
 
-[Linux驱动2-模块参数param和符](https://mp.weixin.qq.com/s?__biz=MzUxMjEyNDgyNw==&amp;mid=2247486278&amp;idx=2&amp;sn=0571a04c78fb197483d5de488eafa83c&amp;chksm=f96879b2ce1ff0a4ea31aaa3a86454c08550d1850461715153fb50922311de5afb75a8edf50f&amp;token=1841565883&amp;lang=zh_CN#rd
-)
+  ```
+  sudo bash setup.sh
+  ```
 
-[Linux驱动3-之字符设备架构详解](https://mp.weixin.qq.com/s?__biz=MzUxMjEyNDgyNw==&amp;mid=2247486317&amp;idx=2&amp;sn=b8e5ee6153e03dae32e53970c81eddf0&amp;chksm=f9687999ce1ff08f881907d59cac8387340829875a0e6e3b5da7445a515c64de798b96c9f259&amp;token=1841565883&amp;lang=zh_CN#rd
-)
+- 方法2：也可以手动运行，先Make编译部署至linux内核，再挂载至一个文件夹下，对文件系统测试
 
-[Linux驱动4-进程、文件描述符、file、inode](https://mp.weixin.qq.com/s?__biz=MzUxMjEyNDgyNw==&amp;mid=2247486354&amp;idx=2&amp;sn=9147d5ad7c61d61dd9450dd4f084c37e&amp;chksm=f9687966ce1ff070a4e9950b5bf08f357496385002152d53090f073031f8b5eafd2043c86b0e&amp;token=1841565883&amp;lang=zh_CN#rd
-)
+
+
+### 初赛完成内容：
+
