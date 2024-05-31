@@ -625,7 +625,7 @@ static int XCraft_make_hash_tree(struct dentry *dentry,
 	printk("hinfo赋值成功\n");
 	//计算新增目录项的hash值
 	XCraft_dirhash(qstr->name,qstr->len,&hinfo);
-	printk("XCraft_make_hash_tree 计算hash值成功1\n");
+	printk("XCraft_make_hash_tree 计算hash值成功\n");
 	//将bh2分裂 bh2最后是两个块中应该插入新目录项的块
 	de = do_split(dir,&bh2,frame,&hinfo);
 	printk("do_split成功\n");

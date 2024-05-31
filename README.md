@@ -64,6 +64,31 @@
 - 方法2：也可以手动运行，先Make编译部署至linux内核，再挂载至一个文件夹下，对文件系统测试
 
 
+### 项目目录
+
+```
+├─ data_about_learning # 准备阶段学习记录
+├─ include
+│  ├─ bitmap.h      # 位图操作
+│  ├─ hash.h        # 目录哈希操作
+│  ├─ XCRAFT.h      # 文件系统头文件
+├─ src
+│  ├─ dir.c         # 目录操作
+│  ├─ file.c        # 文件操作
+│  ├─ fs.c          # 文件系统注册挂载与卸载
+│  ├─ inode.c       # inode操作
+│  ├─ mkfs.c        # 文件系统格式化
+│  ├─ super.c       # 超级块操作
+├─ test
+│  ├─ sample1.c       # 测试文件(待开发功能)
+│  ├─ sample2.c       # 测试文件(待开发功能)
+│  ├─ ...             
+├─ Makefile        # 编译文件
+├─ README.md
+├─ setup.sh        # 测试脚本
+
+
+```
 
 ### 初赛完成内容：
 
