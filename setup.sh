@@ -148,7 +148,7 @@ mkdir -p dir90
 mkdir -p dir91
 mkdir -p dir92
 touch 1.txt
-echo "zjr is a super man, no one can exceed him!" > 1.txt
+echo "it's a test! it's a test! it's a test! it's a test" > 1.txt
 cat 1.txt
 ls
 rm -d dir1
