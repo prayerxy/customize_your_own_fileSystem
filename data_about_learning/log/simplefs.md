@@ -1,3 +1,5 @@
+学习往届优秀作品，比如github的开源项目simplefs以及往届作品revofs，这两者代码几乎一样。
+
 ```c
 // disk inode
 struct revofs_inode {
