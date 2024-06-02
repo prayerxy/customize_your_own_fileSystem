@@ -10,6 +10,20 @@
 
 ![](./show.gif)
 
+### 开发报告
+
+[开发报告](./XCRAFT开发文档.pdf)
+
+
+
+### 演示视频
+
+<div>
+    <b>项目视频链接：https://pan.baidu.com/s/1JFFDYpw5kEdWhu2zMRdqUg?pwd=1234</b><br>
+    <b>提取码：1234</b><br>
+</div>
+
+
 ### 提交记录说明
 
 - prayerxy、谢畅均为谢畅提交
@@ -119,22 +133,6 @@
 
 ```
 
-
-
-
-
-### 开发报告
-
-[开发报告](./XCRAFT开发文档.pdf)
-
-
-
-### 演示视频
-
-<div>
-    <b>项目视频链接：https://pan.baidu.com/s/1JFFDYpw5kEdWhu2zMRdqUg</b><br>
-    <b>提取码：1234</b><br>
-</div>
 
 
 
