@@ -127,6 +127,17 @@
 
 [开发报告](./XCRAFT开发文档.pdf)
 
+
+
+### 演示视频
+
+<div>
+    <b>项目视频链接：https://pan.baidu.com/s/1JFFDYpw5kEdWhu2zMRdqUg</b><br>
+    <b>提取码：1234</b><br>
+</div>
+
+
+
 ### 初赛完成内容：
 
 - 设计实现一个Linux内核模块，此模块完成如下功能：
