@@ -70,6 +70,21 @@
   sudo make test
   ```
 
+  结果
+
+  ```
+  ####################
+  file content: Hello World!
+  file deleted
+  file write performance: 0.005930
+  ####################
+  ####################
+  alread write 100 files
+  alread delete 100 files
+  file write performance: 0.007819
+  ####################
+  ```
+
   
 
 
