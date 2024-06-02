@@ -2,6 +2,7 @@
 SRC_DIR := src
 INC_DIR := include
 BUILDDIR := build
+TEST_DIR := test
 
 # Compiler and flags
 CC := gcc
@@ -12,13 +13,11 @@ obj-m += xcraft.o
 ccflags-y := -I$(PWD)/$(INC_DIR)
 xcraft-objs := $(patsubst %.o, $(SRC_DIR)/%.o, fs.o super.o inode.o file.o dir.o)
 
-
-
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 MKFS = $(BUILDDIR)/mkfs.XCraft
 
-all: $(BUILDDIR) $(MKFS)
+run: $(BUILDDIR) $(MKFS)
 	make -C $(KDIR) M=$(PWD) modules
 	mv *.symvers $(BUILDDIR)
 	mv *.ko $(BUILDDIR)
@@ -52,6 +51,16 @@ $(IMAGE): $(MKFS)
 	dd if=/dev/zero of=${IMAGE} bs=1M count=${IMAGESIZE}
 	./$< $(IMAGE)
 
+# Compile all test files in /test directory
+$(BUILDDIR)/%: $(TEST_DIR)/%.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+# Run all tests
+test: $(BUILDDIR) $(patsubst $(TEST_DIR)/%.c, $(BUILDDIR)/%, $(wildcard $(TEST_DIR)/*.c))
+	@for test in $(patsubst $(TEST_DIR)/%.c, $(BUILDDIR)/%, $(wildcard $(TEST_DIR)/*.c)); do \
+		sudo $$test $(IMAGE); \
+	done
+
 check: all
 	script/test.sh $(IMAGE) $(IMAGESIZE) $(MKFS)
 
@@ -60,5 +69,5 @@ clean:
 	rm -f *~ $(PWD)/*.ur-safe
 	rm -f $(MKFS) $(IMAGE)
 	rm -rf $(BUILDDIR)
-.PHONY: all clean
 
+.PHONY: all clean test check

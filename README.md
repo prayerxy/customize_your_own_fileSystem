@@ -63,8 +63,19 @@
 
 - 方法2：也可以手动运行，先Make编译部署至linux内核，再挂载至一个文件夹下，对文件系统测试
 
+- 测试文件系统性能：
+
+  ```sh
+  sudo bash 4test.sh
+  sudo make test
+  ```
+
+  
+
 
 ### 项目目录
+
+
 
 ```
 ├─ data_about_learning # 准备阶段学习记录
@@ -80,15 +91,20 @@
 │  ├─ mkfs.c        # 文件系统格式化
 │  ├─ super.c       # 超级块操作
 ├─ test
-│  ├─ sample1.c       # 测试文件(待开发功能)
-│  ├─ sample2.c       # 测试文件(待开发功能)
+│  ├─ sample1.c       # 测试文件 读写文件
+│  ├─ sample2.c       # 测试文件删除创建100个目录及目录下文件
 │  ├─ ...             
 ├─ Makefile        # 编译文件
 ├─ README.md
-├─ setup.sh        # 测试脚本
+├─ setup.sh        # 运行脚本
+├─ 4test.sh        # 产生文件系统，随后利用`make test`测试文件系统
 
 
 ```
+
+
+
+
 
 ### 开发报告
 
