@@ -14,13 +14,13 @@ int main(){
     for(int i = 0; i < 100; i++){
         char dir[100];
         //不按照i去创建目录名，随机一个目录名
-        sprintf(dir, "%sdir%d", path, i);
+        sprintf(dir, "%s%d", path, i);
         if(mkdir(dir, 0777) == -1){
             printf("create dir failed\n");
             return -1;
         }
         char file[100];
-        sprintf(file, "%sdir%d/nku.txt", path, i);
+        sprintf(file, "%s%d/nku.txt", path, i);
         fp = fopen(file, "w");
         if(fp == NULL){
             printf("open file failed\n");
@@ -34,13 +34,13 @@ int main(){
     for(int i = 0; i < 100; i++){
         //删除文件
         char file[100];
-        sprintf(file, "%sdir%d/nku.txt", path, i);
+        sprintf(file, "%s%d/nku.txt", path, i);
         if(remove(file) == -1){
             printf("delete file failed\n");
         }
         //删除目录
         char dir[100];
-        sprintf(dir, "%sdir%d", path, i);
+        sprintf(dir, "%s%d", path, i);
         if(rmdir(dir) == -1){
             printf("delete dir failed\n");
             return -1;

@@ -400,7 +400,7 @@ static int add_dirent_to_buf(struct dentry *dentry,
 				break;
 			// 检查是否已经存在该目录项
 			// 比较是否有同名现象
-			if(!strncmp(de->name,name,namelen)){
+			if(!strncmp(de->name,name,XCRAFT_NAME_LEN)){
 				printk("same name in add_dirent\n");
 				return -EEXIST;
 			}

@@ -1177,7 +1177,7 @@ static struct buffer_head *XCraft_dx_find_entry(struct inode *dir,
 		if(!de->inode)
 			break;
 		// 比较文件名是否匹配
-		if (strncmp(de->name, name, namelen) == 0)
+		if (strncmp(de->name, name, XCRAFT_NAME_LEN) == 0)
 		{
 			*res_dir = de;
 			ret = bh;
@@ -1263,7 +1263,7 @@ static struct buffer_head *XCraft_find_entry(struct inode *dir,
 		if(!de->inode)
 			break;
 		// 检查名字是否匹配
-		if (!strncmp(de->name, name, namelen))
+		if (!strncmp(de->name, name, XCRAFT_NAME_LEN))
 		{
 			// 已经找到
 			*res_dir = de;
