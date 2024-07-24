@@ -56,6 +56,11 @@ cd /mnt/test
 mkdir -p dir0
 cd dir0
 mkdir -p dir1
+cd dir1
+touch 1.txt
+echo "it's a test! it's a test! it's a test! it's a test" > 1.txt
+cat 1.txt
+cd ..
 mkdir -p dir2
 mkdir -p dir3
 mkdir -p dir4
@@ -151,6 +156,9 @@ touch 1.txt
 echo "it's a test! it's a test! it's a test! it's a test" > 1.txt
 cat 1.txt
 ls
+cd dir1
+rm 1.txt
+cd ..
 rm -d dir1
 rm -d dir2
 rm -d dir3

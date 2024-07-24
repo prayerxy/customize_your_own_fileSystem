@@ -58,36 +58,43 @@ cd 0
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 1
 cd 1
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 2
 cd 2
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 3
 cd 3
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 4
 cd 4
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 5
 cd 5
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 6
 cd 6
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 7
 cd 7
 touch nku.txt
@@ -430,7 +437,6 @@ cd 38
 rm nku.txt
 cd ..
 rm -d 38
-
 EOF
 
 # 卸载测试镜像

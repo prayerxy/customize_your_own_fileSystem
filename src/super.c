@@ -194,7 +194,11 @@ int XCraft_write_inode(struct inode *inode, struct writeback_control *wbc)
     disk_inode->i_flags = cpu_to_le32(xi->i_flags);
     
     for(i=0;i<XCRAFT_N_BLOCK;i++)
-        disk_inode->i_block[i] = cpu_to_le16(xi->i_block[i]);
+        disk_inode->i_block[i] = cpu_to_le32(xi->i_block[i]);
+    
+    // 扩展树内容回写
+    for(i=0;i<XCRAFT_N_BLOCK;i++)
+        disk_inode->i_exblock[i] = xi->i_exblock[i];
     strncpy(disk_inode->i_data, xi->i_data,sizeof(xi->i_data));
     mark_buffer_dirty(bh);
     sync_dirty_buffer(bh);
