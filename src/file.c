@@ -30,6 +30,9 @@ int XCraft_delete_ext(struct inode *inode, struct XCraft_map_blocks *map)
 	// 调整extent时用到
 	int len = 0;
 
+	// 标志位
+	int flag = 0;
+
 	path = XCraft_find_extent(inode, map->m_lblk, NULL);
 	// path是否获取失败
 	if (IS_ERR(path))
@@ -73,6 +76,8 @@ delete_ext:
 
 	if (map->m_lblk == ee_block)
 	{
+		if (ex == XCRAFT_FIRST_EXTENT(eh))
+			flag = 1;
 		// 此时这个extent可以删掉
 		memset(ex, 0, sizeof(struct XCraft_extent));
 		// 然后调整extent
@@ -81,14 +86,16 @@ delete_ext:
 		{
 			memmove(ex, ex + 1, len * sizeof(struct XCraft_extent));
 		}
-
-		eh->eh_entries = cpu_to_le16(le16_to_cpu(eh->eh_entries) + 1);
+		eh->eh_entries = cpu_to_le16(le16_to_cpu(eh->eh_entries) - 1);
 		// 如果ex是叶子节点的第一个extent需要向上更新索引
-		if (ex == XCRAFT_FIRST_EXTENT(eh))
+		if (flag)
 		{
-			ret = XCraft_correct_indexes(inode, path);
-			if(ret)
-				goto out;
+			if (eh->eh_entries != 0){
+				ret = XCraft_correct_indexes(inode, path);
+				mark_inode_dirty(inode);
+				if(ret)
+					goto out;
+			}
 		}
 	}
 	else
@@ -102,8 +109,24 @@ delete_ext:
 		mark_buffer_dirty(path[depth].p_bh);
 out:
 	XCraft_ext_drop_refs(path);
-	kfree(path);
+	if (path)
+		kfree(path);
 	return ret;
+}
+
+u64 XCraft_ext_maxfileblocks(struct inode *inode){
+	u64 res;
+	// int i;
+	// int ext_max_in_blk;
+	// struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
+	// ext_max_in_blk = XCraft_ext_space_leaf(inode);
+	// res = 1;
+	// for (i=0;i<XCRAFT_MAX_EXTENT_DEPTH;i++)
+	// 	res *= ext_max_in_blk;
+	// res *= XCraft_ext_space_root_idx(inode_info);
+	res = (1UL<<15);
+	return res;
+
 }
 
 // 扩展树逻辑块号映射到物理块号
@@ -117,25 +140,40 @@ static int XCraft_ext_file_get_block(struct inode *inode,
 	struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
 	// 创建映射map
 	struct XCraft_map_blocks map;
+	u64 maxfileblocks = XCraft_ext_maxfileblocks(inode);
 	map.m_pblk = 0;
 	map.m_lblk = iblock;
 	// 映射一个extent的长度
 	map.m_len = XCRAFT_EXT_BLOCKS_NUM;
 	int ret;
+	unsigned int i_size;
+	uint32_t i_blocks;
+	i_size = inode->i_size;
+	i_blocks = ceil_div(i_size, XCRAFT_BLOCK_SIZE);
 
 	ret = 0;
+	if (iblock >= maxfileblocks)
+		return -EFBIG;
+	
+	if (iblock >= i_blocks && !create)
+	{
+		printk("iblock >= i_blocks and create = 0");
+		ret = 0;
+		goto end;
+	}
+
 	printk("ext_file_get_block is doing\n");
 	ret = XCraft_ext_map_blocks(inode, &map, create);
 	printk("map.m_pblk: %d\n", map.m_pblk);
 	if (ret > 0)
 	{
-		// 出错
 		map_bh(bh_result, sb, map.m_pblk);
-		bh_result->b_size = sb->s_blocksize * map.m_len;
+		// bh_result->b_size = sb->s_blocksize * map.m_len;
 		ret = 0;
 	}
 	
 	printk("XCraft_ext_file_get_block ret: %d\n",ret);
+end:
 	return ret;
 }
 
@@ -450,11 +488,14 @@ static int XCraft_ext_write_begin(struct file *file, struct address_space *mappi
 								  struct page **pagep, void **fsdata)
 #endif
 {
+	printk("ext_write_begin is doing!\n");
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(file->f_inode->i_sb);
 	struct XCraft_superblock *disk_sb = sb_info->s_super;
 	int err;
 	uint32_t nr_allocs = 0;
-
+	u64 maxfilesize = XCraft_ext_maxfileblocks(file->f_inode) * XCRAFT_BLOCK_SIZE;
+	if (pos + len > maxfilesize)
+		return -ENOSPC;
 	nr_allocs = max(pos + len, file->f_inode->i_size) / XCRAFT_BLOCK_SIZE;
 	if (nr_allocs > file->f_inode->i_blocks - 1)
 		nr_allocs -= file->f_inode->i_blocks - 1;
@@ -473,6 +514,7 @@ static int XCraft_ext_write_begin(struct file *file, struct address_space *mappi
 	/* if this failed, reclaim newly allocated blocks */
 	if (err < 0)
 		pr_err("newly allocated blocks reclaim not implemented yet\n");
+	printk("ext_write_begin is done!err is %d\n", err);
 	return err;
 }
 
@@ -528,6 +570,7 @@ static int XCraft_ext_write_end(struct file *file,
 							loff_t pos, unsigned len, unsigned copied,
 							struct page *page, void *fsdata)
 {
+	printk("ext_write_end is doing\n");
 	struct inode *inode = file->f_inode;
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	struct super_block *sb = inode->i_sb;
@@ -596,6 +639,7 @@ static int XCraft_ext_write_end(struct file *file,
 		}
 	}
 	mark_inode_dirty(inode);
+	printk("ext_write_end is done, ret is %d\n", ret);
 end:
 	return ret;
 }

@@ -16,8 +16,8 @@
 /*一个extent有几个物理磁盘块*/
 #define XCRAFT_EXT_BLOCKS_NUM 3
 
-/*分配的最大物理块数*/
-#define XCRAFT_INIT_MAX_LEN 5
+/*一个XCraft_extent的ee_len最大值*/
+#define XCRAFT_INIT_MAX_LEN 7
 
 #define EFSBADCRC EBADMSG    /* Bad CRC detected */
 #define EFSCORRUPTED EUCLEAN /* Filesystem is corrupted */
@@ -82,7 +82,7 @@ static int XCraft_ext_space_root_idx(struct XCraft_inode_info *xi)
 {
     int size;
 
-    size = sizeof(xi->i_data);
+    size = sizeof(xi->i_exblock);
     size -= sizeof(struct XCraft_extent_header);
     size /= sizeof(struct XCraft_extent_idx);
 
@@ -92,17 +92,19 @@ static int XCraft_ext_space_root_idx(struct XCraft_inode_info *xi)
 // 叶子节点最多容纳多少个extent
 static int XCraft_ext_space_leaf(struct inode *inode)
 {
-    int size;
-    size = (inode->i_sb->s_blocksize - sizeof(struct XCraft_extent_header)) / sizeof(struct XCraft_extent);
-    return size;
+    // int size;
+    // size = (inode->i_sb->s_blocksize - sizeof(struct XCraft_extent_header)) / sizeof(struct XCraft_extent);
+    // return size;
+    return 6;
 }
 
 // 索引节点最多容纳多少个idx
 static int XCraft_ext_space_idx(struct inode *inode)
 {
-    int size;
-    size = (inode->i_sb->s_blocksize - sizeof(struct XCraft_extent_header)) / sizeof(struct XCraft_extent_idx);
-    return size;
+    // int size;
+    // size = (inode->i_sb->s_blocksize - sizeof(struct XCraft_extent_header)) / sizeof(struct XCraft_extent_idx);
+    // return size;
+    return 6;
 }
 
 // extent tree初始化
@@ -114,7 +116,7 @@ static void XCraft_ext_tree_init(struct inode *inode)
 
     eh->eh_magic = XCRAFT_EXT_MAGIC;
     eh->eh_entries = 0;
-    eh->eh_max = XCraft_ext_space_root(xi);
+    eh->eh_max = cpu_to_le16(XCraft_ext_space_root(xi));
     eh->eh_depth = 0;
     eh->eh_unused = 0;
     mark_inode_dirty(inode);
@@ -203,6 +205,7 @@ XCraft_find_extent(struct inode *inode, unsigned int block,
     struct super_block *sb = inode->i_sb;
     short int depth, i, pos = 0;
     int ret;
+    ret = 0;
     // 获取根节点的header
     eh = get_ext_inode_hdr(inode_info);
     // 获取树的深度
@@ -246,6 +249,7 @@ XCraft_find_extent(struct inode *inode, unsigned int block,
         path[pos].p_ext = NULL;
 
         --i;
+        // 读下一层内容
         bh = sb_bread(sb, path[pos].p_block);
         if (IS_ERR(bh))
         {
@@ -300,12 +304,14 @@ static unsigned int find_next_allocated_block(struct XCraft_ext_path *path)
 
         if (depth == path->p_depth)
         {
+            /* leaf */
             /*不是最后一个extent找下一个*/
             if (p->p_ext && p->p_ext != XCRAFT_LAST_EXTENT(p->p_hdr))
                 return le32_to_cpu(p->p_ext[1].ee_block);
         }
         else
         {
+            /* index */
             if (p->p_idx != XCRAFT_LAST_INDEX(p->p_hdr))
                 return le32_to_cpu(p->p_idx[1].ei_leaf);
         }
@@ -391,8 +397,10 @@ static int XCraft_merge_ext_right(struct inode *inode, struct XCraft_ext_path *p
     int merge_done = 0;
     // 深度
     depth = get_ext_tree_depth(inode);
+    struct buffer_head *bh;
     BUG_ON(path[depth].p_hdr == NULL);
     eh = path[depth].p_hdr;
+    bh = path[depth].p_bh;
 
     while (ex < XCRAFT_LAST_EXTENT(eh)) {
         if (!XCraft_ext_can_merge(ex, ex+1))
@@ -407,6 +415,12 @@ static int XCraft_merge_ext_right(struct inode *inode, struct XCraft_ext_path *p
         // 更新header计数
         eh->eh_entries = cpu_to_le16(le16_to_cpu(eh->eh_entries)-1);
         merge_done = 1;
+    }
+    if (bh){
+        if (merge_done){
+            mark_buffer_dirty(bh);
+            brelse(bh);
+        }
     }
     return merge_done;
 }
@@ -482,6 +496,7 @@ static unsigned int XCraft_ext_next_leaf_block(struct XCraft_ext_path *path)
     depth = path->p_depth;
 
     if (depth == 0)
+        // 最底层本来就没有了
         return XCRAFT_EXT_MAX_BLOCKS;
 
     depth--;
@@ -489,7 +504,7 @@ static unsigned int XCraft_ext_next_leaf_block(struct XCraft_ext_path *path)
     while (depth >= 0)
     {
         if (path[depth].p_idx != XCRAFT_LAST_INDEX(path[depth].p_hdr))
-            return le32_to_cpu(path[depth].p_idx->ei_block);
+            return le32_to_cpu(path[depth].p_idx[1].ei_block);
         depth--;
     }
     return XCRAFT_EXT_MAX_BLOCKS;
@@ -573,7 +588,7 @@ static int XCraft_ext_split(struct inode *inode, struct XCraft_ext_path *path,
             goto cleanup;
         alloc_blocks[a] = newblock;
     }
-
+    // a = depth - at
     newblock = alloc_blocks[--a];
     if (unlikely(newblock == 0))
     {
@@ -592,13 +607,13 @@ static int XCraft_ext_split(struct inode *inode, struct XCraft_ext_path *path,
     // 新创建的叶子节点块进行内容赋值
     neh = (struct XCraft_extent_header *)bh->b_data;
     neh->eh_entries = 0;
-    neh->eh_max = XCraft_ext_space_leaf(inode);
+    neh->eh_max = cpu_to_le16(XCraft_ext_space_leaf(inode));
     neh->eh_magic = XCRAFT_EXT_MAGIC;
     neh->eh_depth = 0;
     neh->eh_unused = 0;
 
     // 如果extent不是最后一个extent，那么对新块进行内容copy一部分
-    m = XCRAFT_MAX_EXTENT(path[depth].p_hdr) - path[depth].p_ext++;
+    m = XCRAFT_LAST_EXTENT(path[depth].p_hdr) - path[depth].p_ext++;
     if (m)
     {
         // 进行copy
@@ -662,7 +677,7 @@ static int XCraft_ext_split(struct inode *inode, struct XCraft_ext_path *path,
         fidx->ei_unused = 0;
 
         // index 信息进行copy
-        m = XCRAFT_MAX_INDEX(neh) - path[i].p_idx++;
+        m = XCRAFT_LAST_INDEX(path[i].p_hdr) - path[i].p_idx++;
         if (m)
         {
             memmove(++fidx, path[i].p_idx, sizeof(struct XCraft_extent_idx) * m);
@@ -784,8 +799,6 @@ static int XCraft_grow_indepth(struct inode *inode)
         fidx->ei_block = XCRAFT_FIRST_EXTENT(neh)->ee_block;
     }
 
-    // 将根节点后面没用的部分都置0
-    memset(fidx + 1, 0, sizeof(inode_info->i_exblock) - sizeof(struct XCraft_extent_header) - sizeof(struct XCraft_extent_idx));
     // 更新深度，表示成功加了一层
     neh->eh_depth = cpu_to_le16(le16_to_cpu(neh->eh_depth) + 1);
     // 更新inode
@@ -890,6 +903,7 @@ static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path 
         return -EFSCORRUPTED;
 
     if (ex)
+    // 叶子节点层不为空
     {
         // 尝试进行合并
         if (ex < XCRAFT_LAST_EXTENT(eh) &&
@@ -919,6 +933,7 @@ static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path 
             ex->ee_len = cpu_to_le32(le32_to_cpu(ex->ee_len) + le32_to_cpu(newext->ee_len));
             ex->ee_start = newext->ee_start;
             eh = path[depth].p_hdr;
+
             nearex = ex;
             printk("the merge condition is ok between newext and ex\n");
             goto merge;
@@ -947,14 +962,14 @@ static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path 
         eh = npath[depth].p_hdr;
         if (le16_to_cpu(eh->eh_entries) < le16_to_cpu(eh->eh_max))
         {
-            // 有位置
+            // 有位置，路径赋值
             path = npath;
             goto has_space;
         }
     }
 
-    // 必须创建新的叶子节点，在里面进行路径更新
-    err = XCraft_create_new_leaf(inode, ppath, newext);
+    // 必须创建新的叶子节点，在里面进行path路径更新
+    err = XCraft_create_new_leaf(inode, &path, newext);
     if (err)
         goto cleanup;
     printk("over create_new_leaf\n");
@@ -1028,7 +1043,7 @@ static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *
     struct XCraft_superblock_info *sbi = XCRAFT_SB(sb);
     
     struct XCraft_extent newex, *ex;
-    int err = 0, depth, ret;
+    int err = 0, depth;
     int newblock = 0;
     // 最终成功映射的物理块长度
     int allocated = 0;
@@ -1072,10 +1087,11 @@ static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *
             goto out;
         }
     }
-
+    // 运行到这说明此时并没有创建
     // 是否创建
     if (!create){
         err = 0;
+        allocated = 0;
         goto out;
     }
 
@@ -1086,6 +1102,7 @@ static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *
 
     newex.ee_block = cpu_to_le32(map->m_lblk);
     newex.ee_len = cpu_to_le32(map->m_len);
+    newex.ee_start = cpu_to_le32(0);
 
     // 检查重叠区域，并进行去重操作
     err = XCraft_check_overlap(inode, &newex, path);

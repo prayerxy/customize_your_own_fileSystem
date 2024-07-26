@@ -57,6 +57,7 @@ mkdir -p 0
 cd 0
 touch nku.txt
 echo "hello world" > nku.txt
+cat nku.txt
 cd ..
 ls
 mkdir -p 1
@@ -100,102 +101,131 @@ cd 7
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 8
 cd 8
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 9
 cd 9
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 10
 cd 10
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 11
 cd 11
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 12
 cd 12
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 13
 cd 13
-touch nku.txt
 echo "hello world" > nku.txt
+touch nku.txt
 cd ..
+ls
 mkdir -p 14
 cd 14
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 15
 cd 15
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 16
 cd 16
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 17
 cd 17
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 18
 cd 18
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 19
 cd 19
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 20
 cd 20
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
+ls
 mkdir -p 21
 cd 21
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 22
 cd 22
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 23
 cd 23
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 24
 cd 24
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 25
 cd 25
 touch nku.txt
 echo "hello world" > nku.txt
 cd ..
+ls
 mkdir -p 26
 
 
 cd 26
 touch nku.txt
 echo "hello world" > nku.txt
+
 cd ..
 mkdir -p 27
 cd 27

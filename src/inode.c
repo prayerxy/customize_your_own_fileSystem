@@ -203,6 +203,7 @@ end:
 // 扩展树方式删除文件中的扩展树
 static int XCraft_ext_delete_file_block(struct inode *inode)
 {
+	printk("begin XCraft_ext_delete_file_block!\n");
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	// 超级块
 	struct super_block *sb = inode->i_sb;
@@ -210,12 +211,9 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 
 	struct XCraft_extent *ext;
 	struct XCraft_extent_idx *eix;
-	struct XCraft_extent_header *eh;
+	struct XCraft_extent_header *eh, *idx_eh, *leaf_eh;
 	// 使用dfs方式删除树，用path存储路径
 	// path我们重点使用p_block, p_depth, p_bh等，其中p_depth现在记录是第几个idx或者extent
-	// npath动态移动
-	struct XCraft_ext_path *path = NULL, *npath = NULL;
-
 	// buffer_head
 	struct buffer_head *bh, *bh2, *bh_tmp;
 	int retval = 0;
@@ -231,13 +229,12 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 
 	// 获取扩展树的深度
 	depth = get_ext_tree_depth(inode);
+	printk("in ext_delete_file_block, depth is %d\n", depth);
 	// 获取根节点的头
 	eh = get_ext_inode_hdr(xi);
 
 	// 初始化path, 注意叶子节点层不存
-	path = kzalloc(sizeof(struct XCraft_ext_path) * (depth + 1), GFP_KERNEL);
-	if (unlikely(!path))
-		return ERR_PTR(-ENOMEM);
+	struct XCraft_ext_path path[depth + 1], *npath;
 	npath = path;
 	path[0].p_hdr = eh;
 	path[0].p_bh = NULL;
@@ -246,20 +243,18 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 	r_tmp = i_tmp = e_tmp = 0;
 	r_cnt = le16_to_cpu(eh->eh_entries);
 	i_cnt = e_cnt = 0;
+	printk("r_cnt is %d\n",r_cnt);
 
 	while (r_tmp < r_cnt)
 	{
-		// 获取根节点头部
-		eh = get_ext_inode_hdr(xi);
+		printk("r_tmp now is: %d\n",r_tmp);
 		if (!depth)
 		{
 			// 扩展树深度为0情况
 			ext = (struct XCraft_extent *)((char *)eh + sizeof(struct XCraft_extent_header) +
 										   r_tmp * sizeof(struct XCraft_extent));
 			// 释放物理块
-			pblk = le32_to_cpu(ext->ee_start);
-			ee_len = le32_to_cpu(ext->ee_start);
-			put_blocks(sbi, pblk, ee_len);
+			put_blocks(sbi, le32_to_cpu(ext->ee_start), le32_to_cpu(ext->ee_len));
 		}
 		else
 		{
@@ -268,6 +263,7 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 											   r_tmp * sizeof(struct XCraft_extent_idx));
 			path[0].p_idx = eix;
 			path[0].p_depth = r_tmp;
+			// 下一级节点的物理块号存储
 			path[0].p_block = le32_to_cpu(eix->ei_leaf);
 
 			bh = sb_bread(sb, path[0].p_block);
@@ -277,7 +273,12 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 				goto end;
 			}
 
+			// depth为1的情况下根节点直接索引叶子节点
+			
+
 			bh2 = bh;
+
+			// 第一种情况，此时depth不为1
 			// 保证遍历的是索引节点
 			if (cur_level < depth - 1)
 			{
@@ -285,15 +286,17 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 			again:
 				cur_level += 1;
 				// 获取头部
-				eh = (struct XCraft_extent_header *)bh2->b_data;
-				i_cnt = le16_to_cpu(eh->eh_entries);
+				idx_eh = (struct XCraft_extent_header *)bh2->b_data;
+				i_cnt = le16_to_cpu(idx_eh->eh_entries);
 
 			back:
 				// 索引节点中遍历
 				while (i_tmp < i_cnt)
 				{
-					eix = (struct XCraft_extent_idx *)((char *)eh + sizeof(struct XCraft_extent_header) +
+					eix = (struct XCraft_extent_idx *)((char *)idx_eh + sizeof(struct XCraft_extent_header) +
 													   i_tmp * sizeof(struct XCraft_extent_idx));
+					// 下一级节点的物理块
+					printk("i_tmp is %d, eix->ei_leaf is %d\n",i_tmp,le32_to_cpu(eix->ei_leaf));
 					bh_tmp = sb_bread(sb, le32_to_cpu(eix->ei_leaf));
 					if (!bh_tmp)
 					{
@@ -303,11 +306,13 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 
 					if (cur_level < depth - 1)
 					{
+						printk("dfs enter!\n");
 						npath = npath + 1;
 						npath->p_bh = bh2;
 						npath->p_depth = i_tmp;
 						npath->p_idx = eix;
-						npath->p_hdr = eh;
+						npath->p_hdr = idx_eh;
+						// 存储下一级物理块号
 						npath->p_block = le32_to_cpu(eix->ei_leaf);
 						// 重置
 						i_tmp = 0;
@@ -316,74 +321,91 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 					}
 					// 否则就是最后一级索引节点
 					// bh_tmp此时指向的就是叶子节点，遍历每一个ext释放
-					eh = (struct XCraft_extent_header *)bh_tmp->b_data;
-					e_cnt = le16_to_cpu(eh->eh_entries);
+					leaf_eh = (struct XCraft_extent_header *)bh_tmp->b_data;
+					e_cnt = le16_to_cpu(leaf_eh->eh_entries);
 					e_tmp = 0;
 					while (e_tmp < e_cnt)
 					{
-						ext = (struct XCraft_extent *)((char *)eh + sizeof(struct XCraft_extent_header) +
+						ext = (struct XCraft_extent *)((char *)leaf_eh + sizeof(struct XCraft_extent_header) +
 													   e_tmp * sizeof(struct XCraft_extent));
 						pblk = le32_to_cpu(ext->ee_start);
 						ee_len = le32_to_cpu(ext->ee_len);
+						printk("e_tmp is %d, pblk is %d\n", e_tmp, pblk);
 						// 释放掉物理块
 						put_blocks(sbi, pblk, ee_len);
+						e_tmp += 1;
 					}
-
+					
 					// 叶子节点块释放
-					memset(bh_tmp, 0, XCRAFT_BLOCK_SIZE);
-					mark_buffer_dirty(bh_tmp);
 					put_blocks(sbi, le32_to_cpu(eix->ei_leaf), 1);
 					i_tmp += 1;
 				}
+				printk("hello!\n");
 				// 最后一级索引节点释放
-				memset(bh2->b_data, 0, XCRAFT_BLOCK_SIZE);
-				mark_buffer_dirty(bh2);
 				put_blocks(sbi, npath->p_block, 1);
 				cur_level -= 1;
-
+				printk("after hello, cur_level is %d\n",cur_level);
 				// 确定回退到的确定位置
 				while (cur_level > 0)
 				{
+					printk(".....\n");
 					// 获取header
 					bh2 = npath->p_bh;
-					eh = (struct XCraft_extent_header *)bh2->b_data;
+					idx_eh = npath->p_hdr;
 					i_tmp = npath->p_depth;
-					i_cnt = le16_to_cpu(eh->eh_entries);
+					i_cnt = le16_to_cpu(idx_eh->eh_entries);
 					if (i_tmp < i_cnt - 1)
 					{
 						// 找到了回溯的位置
-						i_tmp++;
+						i_tmp+=1;
 						npath = npath - 1;
 						break;
 					}
 					// 该层满了
 					// 满了就释放
-					memset(bh2->b_data, 0, XCRAFT_BLOCK_SIZE);
-					mark_buffer_dirty(bh2);
 					put_blocks(sbi, (npath - 1)->p_block, 1);
 					npath = npath - 1;
 					cur_level -= 1;
 				}
 
+				printk("hi\n");
+				printk("cur_level = %d\n", cur_level);
 				// cur_level为0此时又需要遍历根节点
 				if (!cur_level)
 					goto root_again;
 				goto back;
 			}
+
+			// 此时深度为1
+			leaf_eh = (struct XCraft_extent_header *)bh->b_data;
+			e_cnt = le16_to_cpu(leaf_eh->eh_entries);
+			e_tmp = 0;
+			while (e_tmp < e_cnt)
+			{
+				ext = (struct XCraft_extent *)((char *)leaf_eh + sizeof(struct XCraft_extent_header) +
+													   e_tmp * sizeof(struct XCraft_extent));
+				pblk = le32_to_cpu(ext->ee_start);
+				ee_len = le32_to_cpu(ext->ee_len);
+				put_blocks(sbi, pblk, ee_len);
+				e_tmp += 1;
+			}
+			put_blocks(sbi, path[0].p_block, 1);
 		}
 	root_again:
+		printk("enter root_again\n");
 		// 根节点下一个idx或者extent
-		r_tmp++;
+		r_tmp+=1;
 		i_tmp = 0;
+		printk("after update, r_tmp is %d\n",r_tmp);
 	}
-
+	printk("success in ext_delete_file_block!\n");
 	// 最后对根节点相关扩展树信息进行更新
 	memset(xi->i_exblock, 0, sizeof(xi->i_exblock));
 	printk("finish XCraft_ext_delete_file_block\n");
 	return retval;
-	
+
 out_bh:
-	if(bh)
+	if (bh)
 		brelse(bh);
 end:
 	return retval;
@@ -669,13 +691,16 @@ struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	{
 		for (i = 0; i < XCRAFT_N_BLOCK; i++)
 			xi->i_block[i] = le32_to_cpu(disk_inode->i_block[i]);
+		for (i = 0; i < XCRAFT_N_BLOCK; i++)
+			xi->i_exblock[i] = 0;
+
 		inode->i_fop = &XCraft_dir_operations;
 	}
 	else if (S_ISREG(inode->i_mode))
 	{
 		for (i = 0; i < XCRAFT_N_BLOCK; i++)
 		{
-			xi->i_block[i] = le32_to_cpu(disk_inode->i_block[i]);
+			xi->i_block[i] = 0;
 			xi->i_exblock[i] = disk_inode->i_exblock[i];
 		}
 		inode->i_fop = &XCraft_file_operations;
@@ -777,17 +802,6 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 		return inode;
 	}
 
-	// 获取一个空闲的块号
-	// 获取时要修改超级块和块组描述符信息
-
-	// 要修改此获取函数
-	bno = get_free_blocks(sb_info, 1);
-	if (!bno)
-	{
-		ret = -ENOSPC;
-		goto failed_inode;
-	}
-
 #if MNT_IDMAP_REQUIRED()
 	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 #elif USER_NS_REQUIRED()
@@ -795,7 +809,6 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 #else
 	inode_init_owner(inode, dir, mode);
 #endif
-	inode->i_blocks = 1;
 
 	// 统一将目录和文件的i_block[0]置成bno，其他字段置为0
 	memset(xi->i_block, 0, sizeof(xi->i_block));
@@ -803,6 +816,17 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 	memset(xi->i_exblock, 0, sizeof(xi->i_exblock));
 	if (S_ISDIR(mode))
 	{
+		// 获取一个空闲的块号
+		// 获取时要修改超级块和块组描述符信息
+
+		// 要修改此获取函数
+		bno = get_free_blocks(sb_info, 1);
+		if (!bno)
+		{
+			ret = -ENOSPC;
+			goto failed_inode;
+		}
+		inode->i_blocks = 1;
 		// 目录只初始化其i_block[0]
 		xi->i_block[0] = bno;
 		// 字段赋值存疑
@@ -813,8 +837,7 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 	else if (S_ISREG(mode))
 	{
 
-		// 只最开始分配一个块
-		xi->i_block[0] = bno;
+		inode->i_blocks = 1;
 		// 对扩展树的相关内容初始化
 		XCraft_ext_tree_init(inode);
 		// 记录此时文件的大小，后续依据此来确定是否需要重新添加i_block
@@ -1579,6 +1602,7 @@ end:
 // lookup
 static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
+	printk("begin XCraft_lookup\n");
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode = NULL;
 	struct buffer_head *bh = NULL;
@@ -1771,18 +1795,6 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 	{
 		// 文件 扩展树和索引块方式
 		// retval = XCraft_delete_file_block(inode);
-
-		i_block = inode_info->i_block[0];
-		bh = sb_bread(sb, i_block);
-		if (!bh){
-			retval = -EIO;
-			goto end;
-		}
-		memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
-		mark_buffer_dirty(bh);
-		brelse(bh);
-		put_blocks(sb_info, i_block, 1);
-
 		retval = XCraft_ext_delete_file_block(inode);
 		printk("XCraft_unlink delete_file_block retval: %d\n", retval);
 		if (retval)
