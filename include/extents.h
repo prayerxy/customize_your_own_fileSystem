@@ -192,7 +192,7 @@ static void XCraft_ext_binsearch(struct inode *inode, struct XCraft_ext_path *pa
     path->p_ext = l - 1;
 }
 
-// 搜索路径获取
+// 搜索路径获取   搜索逻辑块号block 存储路径至orig_path
 static struct XCraft_ext_path *
 XCraft_find_extent(struct inode *inode, unsigned int block,
                    struct XCraft_ext_path **orig_path)
@@ -313,7 +313,7 @@ static unsigned int find_next_allocated_block(struct XCraft_ext_path *path)
         {
             /* index */
             if (p->p_idx != XCRAFT_LAST_INDEX(p->p_hdr))
-                return le32_to_cpu(p->p_idx[1].ei_leaf);
+                return le32_to_cpu(p->p_idx[1].ei_block);
         }
         depth--;
     }

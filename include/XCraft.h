@@ -212,15 +212,6 @@ struct XCraft_extent_header {
 	__le32	eh_unused;	
 };
 
-struct XCraft_ext_path {
-	unsigned int p_block;
-	__u16 p_depth;
-    __u16 p_maxdepth;
-	struct XCraft_extent	*p_ext;
-	struct XCraft_extent_idx    *p_idx;
-	struct XCraft_extent_header *p_hdr;
-	struct buffer_head *p_bh;
-};
 
 // 映射时使用
 struct XCraft_map_blocks {
@@ -298,6 +289,16 @@ struct dx_map_entry
 	u32 hash;
 	u16 offs;
 	u16 size;
+};
+
+struct XCraft_ext_path {
+	unsigned int p_block;
+	__u16 p_depth;
+    __u16 p_maxdepth;
+	struct XCraft_extent	*p_ext;
+	struct XCraft_extent_idx    *p_idx;
+	struct XCraft_extent_header *p_hdr;
+	struct buffer_head *p_bh;
 };
 
 /*superblock functions*/

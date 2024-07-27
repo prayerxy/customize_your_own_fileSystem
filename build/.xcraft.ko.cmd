@@ -1,0 +1,1 @@
+cmd_/home/prayer/os/project2210132-232458/xcraft.ko := ld -r -m elf_x86_64 -z noexecstack --build-id=sha1  -T scripts/module.lds -o /home/prayer/os/project2210132-232458/xcraft.ko /home/prayer/os/project2210132-232458/xcraft.o /home/prayer/os/project2210132-232458/xcraft.mod.o;  true

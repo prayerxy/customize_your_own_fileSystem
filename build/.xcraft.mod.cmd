@@ -1,0 +1,1 @@
+cmd_/home/prayer/os/project2210132-232458/xcraft.mod := printf '%s\n'   src/fs.o src/super.o src/inode.o src/file.o src/dir.o | awk '!x[$$0]++ { print("/home/prayer/os/project2210132-232458/"$$0) }' > /home/prayer/os/project2210132-232458/xcraft.mod
