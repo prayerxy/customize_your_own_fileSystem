@@ -48,7 +48,7 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	struct buffer_head *bh_tmp;
 
 	// 获取i_block
-	i_block = xi->i_block[0];
+	i_block = le32_to_cpu(xi->i_block[0]);
 	// 获取dx_root
 	bh = sb_bread(sb, i_block);
 	if (!bh)
@@ -203,7 +203,7 @@ end:
 // 扩展树方式删除文件中的扩展树
 static int XCraft_ext_delete_file_block(struct inode *inode)
 {
-	printk("begin XCraft_ext_delete_file_block!\n");
+	// printk("begin XCraft_ext_delete_file_block!\n");
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	// 超级块
 	struct super_block *sb = inode->i_sb;
@@ -229,7 +229,7 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 
 	// 获取扩展树的深度
 	depth = get_ext_tree_depth(inode);
-	printk("in ext_delete_file_block, depth is %d\n", depth);
+	// printk("in ext_delete_file_block, depth is %d\n", depth);
 	// 获取根节点的头
 	eh = get_ext_inode_hdr(xi);
 
@@ -243,11 +243,11 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 	r_tmp = i_tmp = e_tmp = 0;
 	r_cnt = le16_to_cpu(eh->eh_entries);
 	i_cnt = e_cnt = 0;
-	printk("r_cnt is %d\n",r_cnt);
+	// printk("r_cnt is %d\n",r_cnt);
 
 	while (r_tmp < r_cnt)
 	{
-		printk("r_tmp now is: %d\n",r_tmp);
+		// printk("r_tmp now is: %d\n",r_tmp);
 		if (!depth)
 		{
 			// 扩展树深度为0情况
@@ -296,7 +296,7 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 					eix = (struct XCraft_extent_idx *)((char *)idx_eh + sizeof(struct XCraft_extent_header) +
 													   i_tmp * sizeof(struct XCraft_extent_idx));
 					// 下一级节点的物理块
-					printk("i_tmp is %d, eix->ei_leaf is %d\n",i_tmp,le32_to_cpu(eix->ei_leaf));
+					// printk("i_tmp is %d, eix->ei_leaf is %d\n",i_tmp,le32_to_cpu(eix->ei_leaf));
 					bh_tmp = sb_bread(sb, le32_to_cpu(eix->ei_leaf));
 					if (!bh_tmp)
 					{
@@ -306,7 +306,7 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 
 					if (cur_level < depth - 1)
 					{
-						printk("dfs enter!\n");
+						// printk("dfs enter!\n");
 						npath = npath + 1;
 						npath->p_bh = bh2;
 						npath->p_depth = i_tmp;
@@ -330,7 +330,7 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 													   e_tmp * sizeof(struct XCraft_extent));
 						pblk = le32_to_cpu(ext->ee_start);
 						ee_len = le32_to_cpu(ext->ee_len);
-						printk("e_tmp is %d, pblk is %d\n", e_tmp, pblk);
+						// printk("e_tmp is %d, pblk is %d\n", e_tmp, pblk);
 						// 释放掉物理块
 						put_blocks(sbi, pblk, ee_len);
 						e_tmp += 1;
@@ -340,15 +340,15 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 					put_blocks(sbi, le32_to_cpu(eix->ei_leaf), 1);
 					i_tmp += 1;
 				}
-				printk("hello!\n");
+				// printk("hello!\n");
 				// 最后一级索引节点释放
 				put_blocks(sbi, npath->p_block, 1);
 				cur_level -= 1;
-				printk("after hello, cur_level is %d\n",cur_level);
+				// printk("after hello, cur_level is %d\n",cur_level);
 				// 确定回退到的确定位置
 				while (cur_level > 0)
 				{
-					printk(".....\n");
+					// printk(".....\n");
 					// 获取header
 					bh2 = npath->p_bh;
 					idx_eh = npath->p_hdr;
@@ -368,8 +368,8 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 					cur_level -= 1;
 				}
 
-				printk("hi\n");
-				printk("cur_level = %d\n", cur_level);
+				// printk("hi\n");
+				// printk("cur_level = %d\n", cur_level);
 				// cur_level为0此时又需要遍历根节点
 				if (!cur_level)
 					goto root_again;
@@ -392,16 +392,16 @@ static int XCraft_ext_delete_file_block(struct inode *inode)
 			put_blocks(sbi, path[0].p_block, 1);
 		}
 	root_again:
-		printk("enter root_again\n");
+		// printk("enter root_again\n");
 		// 根节点下一个idx或者extent
 		r_tmp+=1;
 		i_tmp = 0;
-		printk("after update, r_tmp is %d\n",r_tmp);
+		// printk("after update, r_tmp is %d\n",r_tmp);
 	}
-	printk("success in ext_delete_file_block!\n");
+	// printk("success in ext_delete_file_block!\n");
 	// 最后对根节点相关扩展树信息进行更新
-	memset(xi->i_exblock, 0, sizeof(xi->i_exblock));
-	printk("finish XCraft_ext_delete_file_block\n");
+	memset(xi->i_block, 0, sizeof(xi->i_block));
+	// printk("finish XCraft_ext_delete_file_block\n");
 	return retval;
 
 out_bh:
@@ -419,7 +419,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
-	unsigned int *i_block = xi->i_block;
+	__le32 *i_block = xi->i_block;
 	struct buffer_head *bh, *bh2, *bh3;
 	int i, j, k, retval;
 	// 用于后面释放块时存储块号
@@ -469,7 +469,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 		free_direct = (nr_used > direct_max_blocks ? direct_max_blocks : nr_used);
 		for (i = 0; i < free_direct; i++)
 		{
-			bh = sb_bread(sb, i_block[i]);
+			bh = sb_bread(sb, le32_to_cpu(i_block[i]));
 			if (!bh)
 			{
 				retval = -EIO;
@@ -477,7 +477,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 			}
 			memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
 			mark_buffer_dirty(bh);
-			put_blocks(sb_info, i_block[i], 1);
+			put_blocks(sb_info, le32_to_cpu(i_block[i]), 1);
 			brelse(bh);
 		}
 		nr_used -= free_direct;
@@ -496,7 +496,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 		// 对free_indirect进行判断
 		for (i = 0; i < XCRAFT_N_INDIRECT; i++)
 		{
-			bh = sb_bread(sb, i_block[XCRAFT_N_DIRECT + i]);
+			bh = sb_bread(sb, le32_to_cpu(i_block[XCRAFT_N_DIRECT + i]));
 			if (!bh)
 			{
 				retval = -EIO;
@@ -521,7 +521,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 			}
 			memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
 			mark_buffer_dirty(bh);
-			put_blocks(sb_info, i_block[XCRAFT_N_DIRECT + i], 1);
+			put_blocks(sb_info, le32_to_cpu(i_block[XCRAFT_N_DIRECT + i]), 1);
 			if (!tmp)
 				break;
 		}
@@ -539,7 +539,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 		// 三重循环
 		for (i = 0; i < XCRAFT_N_DOUBLE_INDIRECT; i++)
 		{
-			bh = sb_bread(sb, i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + i]);
+			bh = sb_bread(sb, le32_to_cpu(i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + i]));
 			if (!bh)
 			{
 				retval = -EIO;
@@ -580,7 +580,7 @@ static int XCraft_delete_file_block(struct inode *inode)
 			}
 			memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
 			mark_buffer_dirty(bh);
-			put_blocks(sb_info, i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + i], 1);
+			put_blocks(sb_info, le32_to_cpu(i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + i]), 1);
 			brelse(bh);
 			if (!tmp)
 				break;
@@ -690,19 +690,13 @@ struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	if (S_ISDIR(inode->i_mode))
 	{
 		for (i = 0; i < XCRAFT_N_BLOCK; i++)
-			xi->i_block[i] = le32_to_cpu(disk_inode->i_block[i]);
-		for (i = 0; i < XCRAFT_N_BLOCK; i++)
-			xi->i_exblock[i] = 0;
-
+			xi->i_block[i] = disk_inode->i_block[i];
 		inode->i_fop = &XCraft_dir_operations;
 	}
 	else if (S_ISREG(inode->i_mode))
 	{
 		for (i = 0; i < XCRAFT_N_BLOCK; i++)
-		{
-			xi->i_block[i] = 0;
-			xi->i_exblock[i] = disk_inode->i_exblock[i];
-		}
+			xi->i_block[i] = disk_inode->i_block[i];
 		inode->i_fop = &XCraft_file_operations;
 		inode->i_mapping->a_ops = &XCraft_aops;
 	}
@@ -810,10 +804,8 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 	inode_init_owner(inode, dir, mode);
 #endif
 
-	// 统一将目录和文件的i_block[0]置成bno，其他字段置为0
+	// 统一将目录的i_block[0]置成bno，其他字段置为0
 	memset(xi->i_block, 0, sizeof(xi->i_block));
-	// 扩展树的i_exblock重置
-	memset(xi->i_exblock, 0, sizeof(xi->i_exblock));
 	if (S_ISDIR(mode))
 	{
 		// 获取一个空闲的块号
@@ -828,7 +820,7 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 		}
 		inode->i_blocks = 1;
 		// 目录只初始化其i_block[0]
-		xi->i_block[0] = bno;
+		xi->i_block[0] = cpu_to_le32(bno);
 		// 字段赋值存疑
 		inode->i_size = XCRAFT_BLOCK_SIZE;
 		inode->i_fop = &XCraft_dir_operations;
@@ -904,7 +896,7 @@ dx_probe(struct qstr *entry, struct inode *dir,
 
 	// 获取i_block[0]对应的磁盘块
 
-	i_block = dir_info->i_block[0];
+	i_block = le32_to_cpu(dir_info->i_block[0]);
 	bh = sb_bread(sb, i_block);
 	if (!bh)
 	{
@@ -1227,7 +1219,7 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 	}
 
 	// 遍历第一个块，此块已经被我们分配过
-	i_block = dir_info->i_block[0]; // 261
+	i_block = le32_to_cpu(dir_info->i_block[0]); // 261
 	printk("XCraft_add_entry i_block: %d\n", i_block);
 	bh = sb_bread(sb, i_block);
 	if (!bh)
@@ -1453,7 +1445,7 @@ static struct buffer_head *XCraft_find_entry(struct inode *dir,
 		return NULL;
 
 	// 获取i_block[0]
-	i_block = dir_info->i_block[0];
+	i_block = le32_to_cpu(dir_info->i_block[0]);
 
 	bh = sb_bread(sb, i_block);
 	if (!bh)
@@ -1591,7 +1583,7 @@ static int XCraft_create(struct inode *dir,
 
 end_inode:
 	// 释放inode中的i_block[0]
-	put_blocks(sb_info, inode_info->i_block[0], 1);
+	put_blocks(sb_info, le32_to_cpu(inode_info->i_block[0]), 1);
 	// 释放inode
 	put_inode(sb_info, inode->i_ino);
 	iput(inode);
@@ -1762,7 +1754,7 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 	{
 		// 此时硬连接是2
 		// 分hash树和非hash树两种情况删除
-		i_block = inode_info->i_block[0];
+		i_block = le32_to_cpu(inode_info->i_block[0]);
 		bh = sb_bread(sb, i_block);
 		if (!bh)
 		{
@@ -1808,8 +1800,6 @@ clean_inode:
 	inode_info->i_flags = 0;
 	for (i = 0; i < XCRAFT_N_BLOCK; i++)
 		inode_info->i_block[i] = 0;
-	for (i = 0; i < XCRAFT_N_BLOCK; i++)
-		inode_info->i_exblock[i] = 0;
 	inode->i_blocks = 0;
 	inode->i_size = 0;
 	i_uid_write(inode, 0);

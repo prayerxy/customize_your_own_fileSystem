@@ -207,7 +207,7 @@ static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 
 	eno = ctx->pos - 2;
 	// 遍历目录项 分哈希树和不是哈希树两种情况
-	i_block = xi->i_block[0];
+	i_block = le32_to_cpu(xi->i_block[0]);
 
 	if(XCraft_INODE_ISHASH_TREE(xi->i_flags)){
 		// 哈希树情况，遍历hash树查找目录项

@@ -157,14 +157,14 @@ static int XCraft_ext_file_get_block(struct inode *inode,
 	
 	if (iblock >= i_blocks && !create)
 	{
-		printk("iblock >= i_blocks and create = 0");
+		// printk("iblock >= i_blocks and create = 0");
 		ret = 0;
 		goto end;
 	}
 
-	printk("ext_file_get_block is doing\n");
+	// printk("ext_file_get_block is doing\n");
 	ret = XCraft_ext_map_blocks(inode, &map, create);
-	printk("map.m_pblk: %d\n", map.m_pblk);
+	// printk("map.m_pblk: %d\n", map.m_pblk);
 	if (ret > 0)
 	{
 		map_bh(bh_result, sb, map.m_pblk);
@@ -172,7 +172,7 @@ static int XCraft_ext_file_get_block(struct inode *inode,
 		ret = 0;
 	}
 	
-	printk("XCraft_ext_file_get_block ret: %d\n",ret);
+	// printk("XCraft_ext_file_get_block ret: %d\n",ret);
 end:
 	return ret;
 }
@@ -200,7 +200,7 @@ static int XCraft_file_get_block(struct inode *inode,
 	struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
 	struct buffer_head *bh, *bh2, *bh3;
 	// 获取i_block数组
-	unsigned int *i_block = inode_info->i_block;
+	__le32 *i_block = inode_info->i_block;
 
 	// bno存储最后我们找到的块号 tmp是中间块号存储变量
 	int ret, bno, bno2;
@@ -222,7 +222,7 @@ static int XCraft_file_get_block(struct inode *inode,
 	// 超过是否能创建
 	if (iblock >= i_blocks && !create)
 	{
-		printk("iblock >= i_blocks and create = 0");
+		// printk("iblock >= i_blocks and create = 0");
 		ret = 0;
 		goto end;
 	}
@@ -263,10 +263,10 @@ static int XCraft_file_get_block(struct inode *inode,
 			mark_buffer_dirty(bh);
 			brelse(bh);
 			// 分配成功需要更新inode
-			i_block[iblock] = bno;
+			i_block[iblock] = cpu_to_le32(bno);
 		}
 		// 获取iblock对应的物理块块号
-		bno = i_block[iblock];
+		bno = le32_to_cpu(i_block[iblock]);
 		mark_inode_dirty(inode);
 	}
 	else if (iblock >= XCRAFT_N_DIRECT && iblock < XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT * bno_num_per_block)
@@ -274,7 +274,7 @@ static int XCraft_file_get_block(struct inode *inode,
 		// 此时iblock对应的块在一级间接索引块中
 		indirect_index = (iblock - XCRAFT_N_DIRECT) / bno_num_per_block;
 		indirect_offset = (iblock - XCRAFT_N_DIRECT) % bno_num_per_block;
-		indirect_bno = i_block[XCRAFT_N_DIRECT + indirect_index];
+		indirect_bno = le32_to_cpu(i_block[XCRAFT_N_DIRECT + indirect_index]);
 		if (!indirect_bno)
 		{
 			// 表示此时其还没有被初始化，必定iblock >= i_blocks && !create
@@ -295,7 +295,7 @@ static int XCraft_file_get_block(struct inode *inode,
 			mark_buffer_dirty(bh);
 			brelse(bh);
 			// 更新inode信息
-			i_block[XCRAFT_N_DIRECT + indirect_index] = indirect_bno;
+			i_block[XCRAFT_N_DIRECT + indirect_index] = cpu_to_le32(indirect_bno);
 		}
 		bh = sb_bread(sb, indirect_bno);
 		if (!bh)
@@ -357,7 +357,7 @@ static int XCraft_file_get_block(struct inode *inode,
 			mark_buffer_dirty(bh);
 			brelse(bh);
 			// 更新inode信息
-			i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + double_indirect_index] = double_indirect_bno;
+			i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + double_indirect_index] = cpu_to_le32(double_indirect_bno);
 		}
 		bh = sb_bread(sb, double_indirect_bno);
 		if (!bh)
@@ -488,7 +488,7 @@ static int XCraft_ext_write_begin(struct file *file, struct address_space *mappi
 								  struct page **pagep, void **fsdata)
 #endif
 {
-	printk("ext_write_begin is doing!\n");
+	// printk("ext_write_begin is doing!\n");
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(file->f_inode->i_sb);
 	struct XCraft_superblock *disk_sb = sb_info->s_super;
 	int err;
@@ -514,7 +514,7 @@ static int XCraft_ext_write_begin(struct file *file, struct address_space *mappi
 	/* if this failed, reclaim newly allocated blocks */
 	if (err < 0)
 		pr_err("newly allocated blocks reclaim not implemented yet\n");
-	printk("ext_write_begin is done!err is %d\n", err);
+	// printk("ext_write_begin is done!err is %d\n", err);
 	return err;
 }
 
@@ -570,12 +570,11 @@ static int XCraft_ext_write_end(struct file *file,
 							loff_t pos, unsigned len, unsigned copied,
 							struct page *page, void *fsdata)
 {
-	printk("ext_write_end is doing\n");
+	// printk("ext_write_end is doing\n");
 	struct inode *inode = file->f_inode;
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
-	unsigned int *i_block = xi->i_block;
 	struct buffer_head *bh;
 
 	// 删除标志位
@@ -639,7 +638,7 @@ static int XCraft_ext_write_end(struct file *file,
 		}
 	}
 	mark_inode_dirty(inode);
-	printk("ext_write_end is done, ret is %d\n", ret);
+	// printk("ext_write_end is done, ret is %d\n", ret);
 end:
 	return ret;
 }
@@ -654,7 +653,7 @@ static int XCraft_write_end(struct file *file,
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
-	unsigned int *i_block = xi->i_block;
+	__le32 *i_block = xi->i_block;
 	struct buffer_head *bh;
 	// 后续遍历时会需要bno和bno2来存储物理块号
 	int bno, bno2;
@@ -717,7 +716,7 @@ static int XCraft_write_end(struct file *file,
 			// 获取的对应的物理块号存在bno中
 			if (first_block < XCRAFT_N_DIRECT)
 			{
-				bno = i_block[first_block];
+				bno = le32_to_cpu(i_block[first_block]);
 				if (!bno)
 					break;
 				// 重置
@@ -728,7 +727,7 @@ static int XCraft_write_end(struct file *file,
 			{
 				indirect_index = (first_block - XCRAFT_N_DIRECT) / bno_num_per_block;
 				indirect_offset = (first_block - XCRAFT_N_DIRECT) % bno_num_per_block;
-				indirect_bno = i_block[XCRAFT_N_DIRECT + indirect_index];
+				indirect_bno = le32_to_cpu(i_block[XCRAFT_N_DIRECT + indirect_index]);
 				if (!indirect_bno)
 					break;
 				bh = sb_bread(sb, indirect_bno);
@@ -753,7 +752,7 @@ static int XCraft_write_end(struct file *file,
 				double_indirect_index = (first_block - XCRAFT_N_DIRECT - XCRAFT_N_INDIRECT * bno_num_per_block) / (bno_num_per_block * bno_num_per_block);
 				double_indirect_one_offset = ((first_block - XCRAFT_N_DIRECT - XCRAFT_N_INDIRECT * bno_num_per_block) % (bno_num_per_block * bno_num_per_block)) / bno_num_per_block;
 				double_indirect_two_offset = ((first_block - XCRAFT_N_DIRECT - XCRAFT_N_INDIRECT * bno_num_per_block) % (bno_num_per_block * bno_num_per_block)) % bno_num_per_block;
-				double_indirect_bno = i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + double_indirect_index];
+				double_indirect_bno = le32_to_cpu(i_block[XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT + double_indirect_index]);
 				if (!double_indirect_bno)
 					break;
 				bh = sb_bread(sb, double_indirect_bno);

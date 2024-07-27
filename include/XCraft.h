@@ -73,9 +73,7 @@ struct XCraft_inode{
     __le16 i_links_count; /* hard links count */
     __le32 i_blocks_lo; /* number of blocks 文件或者目录所使用的块的个数*/
     __le32 i_flags; /* file flags B+树等 */
-    __le32 i_block[XCRAFT_N_BLOCK]; /* pointers to blocks */
-    // 扩展树
-    __le32 i_exblock[XCRAFT_N_BLOCK]; /*extent tree pointers to blocks*/
+    __le32 i_block[XCRAFT_N_BLOCK]; /* pointers to blocks */ /* extent tree pointers to blocks */
     char i_data[32]; /* store symlink content */
 };
 
@@ -213,13 +211,6 @@ struct XCraft_extent_header {
 };
 
 
-// 映射时使用
-struct XCraft_map_blocks {
-	unsigned int m_pblk;
-	unsigned int m_lblk;
-	unsigned int m_len;
-};
-
 #define ASSERT(assert)						\
 do {									\
 	if (unlikely(!(assert))) {					\
@@ -237,8 +228,7 @@ struct XCraft_inode_info{
     __u32 i_nr_files; //只有其是目录才有用，用于确定其下有多少文件和目录
     xcraft_group_t i_block_group;//所在组号
     unsigned long i_flags;//标志位 区别哈希树和普通文件等
-    unsigned int i_block[XCRAFT_N_BLOCK];//指向数据块的指针 
-    __le32 i_exblock[XCRAFT_N_BLOCK]; //extent tree指向数据块指针
+    __le32 i_block[XCRAFT_N_BLOCK];//指向数据块的指针 
     struct inode vfs_inode;
 };
 struct XCraft_ibmap_info{
@@ -299,6 +289,13 @@ struct XCraft_ext_path {
 	struct XCraft_extent_idx    *p_idx;
 	struct XCraft_extent_header *p_hdr;
 	struct buffer_head *p_bh;
+};
+
+// 映射时使用
+struct XCraft_map_blocks {
+	unsigned int m_pblk;
+	unsigned int m_lblk;
+	unsigned int m_len;
 };
 
 /*superblock functions*/

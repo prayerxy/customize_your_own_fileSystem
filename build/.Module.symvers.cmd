@@ -1,1 +1,0 @@
-cmd_/home/prayer/os/project2210132-232458/Module.symvers :=  scripts/mod/modpost -m -a     -o /home/prayer/os/project2210132-232458/Module.symvers -T /home/prayer/os/project2210132-232458/modules.order -i Module.symvers -e 
