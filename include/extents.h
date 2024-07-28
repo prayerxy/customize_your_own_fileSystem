@@ -719,10 +719,8 @@ cleanup:
             put_blocks(sbi, alloc_blocks[i], 1);
         }
     }
-    // printk("in ext_split, kfree begin\n");
     if (alloc_blocks)
         kfree(alloc_blocks);
-    // printk("in ext_split, kfree over\n");
     return err;
 }
 
@@ -810,7 +808,7 @@ end:
 // 创建新的叶子节点
 static int XCraft_create_new_leaf(struct inode *inode, struct XCraft_ext_path **ppath, struct XCraft_extent *newext)
 {
-    // printk("begin create_new_leaf\n");
+    pr_debug("begin create_new_leaf\n");
     struct XCraft_ext_path *path = *ppath;
     struct XCraft_ext_path *curp;
     int depth, i, err = 0;
@@ -830,19 +828,17 @@ repeat:
     // 向上减完就是根节点
     if (XCRAFT_HAS_FREE_INDEX(curp))
     {
-        // printk("begin ext_split\n");
+        pr_debug("begin ext_split\n");
         // 创建子树，不需要增加深度
         err = XCraft_ext_split(inode, path, newext, i);
         if (err)
             goto out;
-        // printk("over XCraft_ext_split\n");
+        pr_debug("over XCraft_ext_split\n");
 
-        // printk("after ext_split, begin find extent\n");
         // 此时更新path
         path = XCraft_find_extent(inode, le32_to_cpu(newext->ee_block), ppath);
         if (IS_ERR(path))
             err = PTR_ERR(path);
-        // printk("after ext_split, over find extent\n");
     }
     else
     {
@@ -853,19 +849,17 @@ repeat:
             err = -EFSCORRUPTED;
             goto out;
         }
-        // printk("begin grow_indepth, lblk is %d\n", le32_to_cpu(newext->ee_block));
+        pr_debug("begin grow_indepth, lblk is %d\n", le32_to_cpu(newext->ee_block));
         err = XCraft_grow_indepth(inode);
         if (err)
             goto out;
-        // printk("over grow_indepth\n");
-        // printk("after grow_indepth, begin find extent\n");
+        pr_debug("over grow_indepth\n");
         path = XCraft_find_extent(inode, le32_to_cpu(newext->ee_block), ppath);
         if (IS_ERR(path))
         {
             err = PTR_ERR(path);
             goto out;
         }
-        // printk("after grow_indepth, over find extent\n");
 
         depth = get_ext_tree_depth(inode);
         // 最后一层叶子节点中extent仍然是满的话，需要重新来生成叶子节点
@@ -921,7 +915,7 @@ static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path 
             ex->ee_len = cpu_to_le32(le32_to_cpu(ex->ee_len) + le32_to_cpu(newext->ee_len));
             eh = path[depth].p_hdr;
             nearex = ex;
-            // printk("the merge condition is ok between ex and newext\n");
+            pr_debug("the merge condition is ok between ex and newext\n");
             goto merge;
         }
 
@@ -935,7 +929,7 @@ static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path 
             eh = path[depth].p_hdr;
 
             nearex = ex;
-            // printk("the merge condition is ok between newext and ex\n");
+            pr_debug("the merge condition is ok between newext and ex\n");
             goto merge;
         }
     }
@@ -972,7 +966,7 @@ static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path 
     err = XCraft_create_new_leaf(inode, &path, newext);
     if (err)
         goto cleanup;
-    // printk("over create_new_leaf\n");
+    pr_debug("over create_new_leaf\n");
     depth = get_ext_tree_depth(inode);
     eh = path[depth].p_hdr;
 
@@ -981,7 +975,7 @@ has_space:
     nearex = path[depth].p_ext;
     if (!nearex)
     {
-        // printk("########\n");
+        pr_debug("########\n");
         // 此时直接插第一个
         nearex = XCRAFT_FIRST_EXTENT(eh);
     }
@@ -1001,29 +995,24 @@ has_space:
 
     // 叶子节点层的计数需要加1
     eh->eh_entries = cpu_to_le16(le16_to_cpu(eh->eh_entries) + 1);
-    // printk("in has_space eh->eh_entries :%d\n",le16_to_cpu(eh->eh_entries));
     path[depth].p_ext = nearex;
     // 插入位置的extent信息更新
     nearex->ee_block = newext->ee_block;
     nearex->ee_start = newext->ee_start;
     nearex->ee_len = newext->ee_len;
 merge:
-    // printk("begin merge\n");
     // 将nearex与周围的进行合并
     XCraft_merge_ext(inode, path, nearex);
-    // printk("over merge\n");
 
     // 如果最后更新的是叶子节点的最左边的extent，索引节点自下至上改变
-    // printk("begin correct_indexes\n");
     err = XCraft_correct_indexes(inode, path);
     if (err)
         goto cleanup;
-    // printk("over correct_indexes\n");
 
     if (path[depth].p_bh)
         mark_buffer_dirty(path[depth].p_bh);
     mark_inode_dirty(inode);
-    // printk("after update, depth is %d\n", depth);
+    pr_debug("after update, depth is %d\n", depth);
 
 cleanup:
     // 对path进行释放清理
@@ -1036,7 +1025,7 @@ cleanup:
 // 执行映射的核心函数
 static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *map, int create)
 {
-    // printk("map->m_lblk = %d\n",map->m_lblk);
+    pr_debug("map->m_lblk = %d\n",map->m_lblk);
     // 搜索路径存储
     struct XCraft_ext_path *path = NULL;
     struct super_block *sb = inode->i_sb;
@@ -1048,10 +1037,8 @@ static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *
     // 最终成功映射的物理块长度
     int allocated = 0;
 
-    // printk("get path begin!\n");
     // 获取搜索路径
     path = XCraft_find_extent(inode, map->m_lblk, NULL);
-    // printk("get path ok!\n");
     // path是否获取失败
     if (IS_ERR(path))
     {
@@ -1063,7 +1050,7 @@ static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *
     // 获取深度
     depth = get_ext_tree_depth(inode);
 
-    // printk("begin in ext_map_blocks, depth is %d\n", depth);
+    pr_debug("begin in ext_map_blocks, depth is %d\n", depth);
     // 叶子节点层的extent
     ex = path[depth].p_ext;
     if (ex)
@@ -1116,11 +1103,11 @@ static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *
 
     // 分配连续物理块
     newblock = XCraft_get_new_ext_blocks(sbi, allocated);
-    // printk("newblock is %d\n", newblock);
+    pr_debug("newblock is %d\n", newblock);
     if (!newblock)
         goto out;
     
-    // printk("newblock get is ok!\n");
+    pr_debug("newblock get is ok!\n");
 
     // 初步设置newex信息
     newex.ee_len = cpu_to_le32(allocated);
@@ -1132,12 +1119,12 @@ static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *
         // 执行失败
         goto out;
     
-    // printk("XCraft_ext_insert_extent is ok!");
+    pr_debug("XCraft_ext_insert_extent is ok!");
     // 完成映射信息
     map->m_pblk = newblock;
     map->m_len = allocated;
-    // printk("XCraft_ext_map_blocks err: %d\n",err);
-    // printk("XCraft_ext_map_blocks allocated: %d\n", allocated);
+    pr_debug("XCraft_ext_map_blocks err: %d\n",err);
+    pr_debug("XCraft_ext_map_blocks allocated: %d\n", allocated);
     return err ? err : allocated;
 
 out:
@@ -1145,8 +1132,8 @@ out:
     XCraft_ext_drop_refs(path);
     if(path)
         kfree(path);
-    // printk("XCraft_ext_map_blocks err: %d\n",err);
-    // printk("XCraft_ext_map_blocks allocated: %d\n", allocated);
+    pr_debug("XCraft_ext_map_blocks err: %d\n",err);
+    pr_debug("XCraft_ext_map_blocks allocated: %d\n", allocated);
     return err ? err : allocated;
 }
 

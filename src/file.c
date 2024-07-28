@@ -135,6 +135,7 @@ static int XCraft_ext_file_get_block(struct inode *inode,
 									 struct buffer_head *bh_result,
 									 int create)
 {
+	pr_debug("beign ext_file_get_block\n");
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
 	struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
@@ -157,22 +158,18 @@ static int XCraft_ext_file_get_block(struct inode *inode,
 	
 	if (iblock >= i_blocks && !create)
 	{
-		// printk("iblock >= i_blocks and create = 0");
 		ret = 0;
 		goto end;
 	}
 
-	// printk("ext_file_get_block is doing\n");
 	ret = XCraft_ext_map_blocks(inode, &map, create);
-	// printk("map.m_pblk: %d\n", map.m_pblk);
+	pr_debug("map.m_pblk: %d\n", map.m_pblk);
 	if (ret > 0)
 	{
 		map_bh(bh_result, sb, map.m_pblk);
-		// bh_result->b_size = sb->s_blocksize * map.m_len;
 		ret = 0;
 	}
 	
-	// printk("XCraft_ext_file_get_block ret: %d\n",ret);
 end:
 	return ret;
 }
@@ -222,7 +219,6 @@ static int XCraft_file_get_block(struct inode *inode,
 	// 超过是否能创建
 	if (iblock >= i_blocks && !create)
 	{
-		// printk("iblock >= i_blocks and create = 0");
 		ret = 0;
 		goto end;
 	}
@@ -488,7 +484,7 @@ static int XCraft_ext_write_begin(struct file *file, struct address_space *mappi
 								  struct page **pagep, void **fsdata)
 #endif
 {
-	// printk("ext_write_begin is doing!\n");
+	pr_debug("ext_write_begin is doing!\n");
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(file->f_inode->i_sb);
 	struct XCraft_superblock *disk_sb = sb_info->s_super;
 	int err;
@@ -514,7 +510,7 @@ static int XCraft_ext_write_begin(struct file *file, struct address_space *mappi
 	/* if this failed, reclaim newly allocated blocks */
 	if (err < 0)
 		pr_err("newly allocated blocks reclaim not implemented yet\n");
-	// printk("ext_write_begin is done!err is %d\n", err);
+	pr_debug("ext_write_begin is done! err is %d\n", err);
 	return err;
 }
 
@@ -570,7 +566,7 @@ static int XCraft_ext_write_end(struct file *file,
 							loff_t pos, unsigned len, unsigned copied,
 							struct page *page, void *fsdata)
 {
-	// printk("ext_write_end is doing\n");
+	pr_debug("ext_write_end is doing\n");
 	struct inode *inode = file->f_inode;
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	struct super_block *sb = inode->i_sb;
@@ -638,7 +634,7 @@ static int XCraft_ext_write_end(struct file *file,
 		}
 	}
 	mark_inode_dirty(inode);
-	// printk("ext_write_end is done, ret is %d\n", ret);
+	pr_debug("ext_write_end is done, ret is %d\n", ret);
 end:
 	return ret;
 }

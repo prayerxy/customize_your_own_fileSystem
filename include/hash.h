@@ -192,7 +192,7 @@ static struct buffer_head *XCraft_append(struct inode*dir,uint32_t*block){
 	bh=sb_bread(sb,*block);
 	
 	if(!bh){
-		printk(KERN_ERR "XCraft: append: no memory\n");
+		pr_debug(KERN_ERR "XCraft: append: no memory\n");
 		return NULL;
 	}
 	// 更新dir中的字段,追加一个块多使用了一个块
@@ -235,7 +235,7 @@ static int dx_make_map(struct inode*dir,struct buffer_head*bh,struct XCraft_hash
 			break;
 		}
 	}
-	printk("dx_make_map process correctly\n");
+	pr_debug("dx_make_map process correctly\n");
 	return count;
 }
 
@@ -277,7 +277,7 @@ static void dx_sort_map (struct dx_map_entry *map, unsigned count){
 		}
 	} while(more);
 
-	printk("dx_sort_map process correctly\n");
+	pr_debug("dx_sort_map process correctly\n");
 }
 
 /*
@@ -294,7 +294,7 @@ dx_move_dirents(struct inode *dir, char *from, char *to,
 		//找到与to里面对应的from的目录项
 		struct XCraft_dir_entry *de=(struct XCraft_dir_entry*)(from+(map->offs<<2));
 		rec_len=le16_to_cpu(de->rec_len);
-		printk("move file_name: %s\n", de->name);
+		pr_debug("move file_name: %s\n", de->name);
 		memcpy(to,de,rec_len);
 		//除了rec_len的部分，其他部分清零
 		de->inode=0;
@@ -327,7 +327,7 @@ static struct XCraft_dir_entry *dx_pack_dirents(struct inode *dir, char *base, u
 	while((char*) de< base + blocksize){
 		next = (struct XCraft_dir_entry*)((char*)de + le16_to_cpu(de->rec_len));
 		if(de->rec_len == 0){
-			printk("rec_len is 0\n");
+			pr_debug("rec_len is 0\n");
 			break;
 		}
 		if(de->inode && de->name_len){
@@ -361,8 +361,8 @@ static void dx_insert_block(struct dx_frame *frame,uint32_t hash,uint32_t bno)
 	dx_set_hash(new,hash);
 	dx_set_block(new,bno);
 	dx_set_count(entries, count + 1);
-	// printk("dx_entries_count:%d\n",dx_get_count(entries));
-	// printk("dx_entries[1]_hash:%x",dx_get_hash(entries+1));
+	// pr_debug("dx_entries_count:%d\n",dx_get_count(entries));
+	// pr_debug("dx_entries[1]_hash:%x",dx_get_hash(entries+1));
 
 }
 
@@ -401,7 +401,7 @@ static int add_dirent_to_buf(struct dentry *dentry,
 			// 检查是否已经存在该目录项
 			// 比较是否有同名现象
 			if(!strncmp(de->name,name,XCRAFT_NAME_LEN)){
-				printk("same name in add_dirent\n");
+				pr_debug("same name in add_dirent\n");
 				return -EEXIST;
 			}
 
@@ -412,14 +412,14 @@ static int add_dirent_to_buf(struct dentry *dentry,
 			if(!flag){
 				count++;
 				if(count>=XCRAFT_dentry_LIMIT){
-					printk("add_dirent_to_buf: too many entries in a block\n");
+					pr_debug("add_dirent_to_buf: too many entries in a block\n");
 					break;
 				}
 			}
 			// 移动到下一个目录项
 			de = (struct XCraft_dir_entry *)((char *)de + reclen);
 		}
-		printk("count:%d\n",count);
+		pr_debug("count:%d\n",count);
 		// 超了
 		if(count>=XCRAFT_dentry_LIMIT || (char *)de > top)
 			return -ENOSPC;
@@ -439,7 +439,7 @@ static int add_dirent_to_buf(struct dentry *dentry,
 		else if(S_ISLNK(inode->i_mode))	
 			de->file_type = XCRAFT_FT_LINK;
 		if(namelen>=XCRAFT_NAME_LEN){
-			printk("add_dirent_to_buf: name too long\n");
+			pr_debug("add_dirent_to_buf: name too long\n");
 			de->name[XCRAFT_NAME_LEN] = '\0';
 			namelen = XCRAFT_NAME_LEN;
 			dentry->d_name.len = namelen;
@@ -448,7 +448,7 @@ static int add_dirent_to_buf(struct dentry *dentry,
 		// 最后一个字符置为空字符
 		de->name[namelen] = '\0';
 		de->name_len = namelen;
-		printk("in add_dirent_to_buf, success");
+		pr_debug("in add_dirent_to_buf, success");
 	}
 
 	// dir访问时间更新
@@ -483,20 +483,20 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 	//第三个块
 	bh2=XCraft_append(dir,&bno);
 	if(!bh2){
-		printk(KERN_ERR "XCraft: do_split: no memory\n");
+		pr_debug(KERN_ERR "XCraft: do_split: no memory\n");
 		return NULL;
 	}
 	data2=bh2->b_data;
 	map = (struct dx_map_entry *) (data2 + blocksize);
 	count=dx_make_map(dir,*bh,hinfo,map);
-	printk("in do_split , count :%d\n", count);
+	pr_debug("in do_split , count :%d\n", count);
 	if(count<0){
-		printk(KERN_ERR "XCraft: do_split: no memory\n");
+		pr_debug(KERN_ERR "XCraft: do_split: no memory\n");
 		return NULL;
 	}
 	map-=count;
 	dx_sort_map(map, count);
-	printk("dx_sort_map success!\n");
+	pr_debug("dx_sort_map success!\n");
 
 	/* Ensure that neither split block is over half full */
 	size = 0;
@@ -521,19 +521,19 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 		split = count/2;
 	//split从1开始是个数 map指向第0个
 	for(i=0;i<count;i++){
-		printk("map[%d].hash=%x\n",i,map[i].hash);
+		pr_debug("map[%d].hash=%x\n",i,map[i].hash);
 	}
 	hash2=map[split].hash;
 	continued = hash2 == map[split - 1].hash;
-	printk("Split block%lu at %x, %i/%i\n", 
+	pr_debug("Split block%lu at %x, %i/%i\n", 
 			(unsigned long)dx_get_block(frame->at),hash2,split, count-split);
 	/*如果split块和split-1的Hash相同，那么split与split-1要在一个块中，所以加上continued*/
 	de2=dx_move_dirents(dir,data1,data2,map+split+continued,count-split-continued,blocksize);
 	
-	printk("dx_move_dirents success!\n");
+	pr_debug("dx_move_dirents success!\n");
 	de=dx_pack_dirents(dir,data1,blocksize);
 
-	printk("dx_pack_dirents success!\n");
+	pr_debug("dx_pack_dirents success!\n");
 	// 统一设置两个块最后一个目录项的rec_len字段
 	de->rec_len = cpu_to_le16(sizeof(struct XCraft_dir_entry));
 	de2->rec_len = cpu_to_le16(sizeof(struct XCraft_dir_entry));
@@ -545,7 +545,7 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 	}
 
 	dx_insert_block(frame,hash2+continued,bno);
-	printk("dx_insert_block success\n");
+	pr_debug("dx_insert_block success\n");
 	brelse(bh2);
 	return de;
 }
@@ -584,14 +584,14 @@ static int XCraft_make_hash_tree(struct dentry *dentry,
 	int retval;
 
 
-	printk(KERN_DEBUG "Creating index: inode %lu\n", dir->i_ino);
+	pr_debug(KERN_DEBUG "Creating index: inode %lu\n", dir->i_ino);
 	/*root*/
 	root=(struct dx_root *)bh->b_data;
 	bh2=XCraft_append(dir,&bno);
-	printk("分配的块号%d\n", bno);
-	printk("hello\n");
+	pr_debug("分配的块号%d\n", bno);
+	pr_debug("hello\n");
 	if(!bh2){
-		printk(KERN_ERR "XCraft: make_hash_tree: no memory\n");
+		pr_debug(KERN_ERR "XCraft: make_hash_tree: no memory\n");
 		return -ENOMEM;
 	}
 	XCraft_set_inode_flag(dir,XCraft_INODE_HASH_TREE);
@@ -609,7 +609,7 @@ static int XCraft_make_hash_tree(struct dentry *dentry,
 	dx_set_block(entries,bno);//bno是物理块号
 	dx_set_count(entries,1);
 	dx_set_limit(entries,dx_root_limit());
-	printk("set dx_root success\n");
+	pr_debug("set dx_root success\n");
 
 
 	memset(frames, 0, sizeof(frames));
@@ -622,13 +622,13 @@ static int XCraft_make_hash_tree(struct dentry *dentry,
 	hinfo.hash_version = XCRAFT_HTREE_VERSION;
 	// memcpy(hinfo.seed, sb_info->s_hash_seed, sizeof(sb_info->s_hash_seed));
 	
-	printk("hinfo赋值成功\n");
+	pr_debug("hinfo赋值成功\n");
 	//计算新增目录项的hash值
 	XCraft_dirhash(qstr->name,qstr->len,&hinfo);
-	printk("XCraft_make_hash_tree 计算hash值成功\n");
+	pr_debug("XCraft_make_hash_tree 计算hash值成功\n");
 	//将bh2分裂 bh2最后是两个块中应该插入新目录项的块
 	de = do_split(dir,&bh2,frame,&hinfo);
-	printk("do_split成功\n");
+	pr_debug("do_split成功\n");
 	if(!de){
 		retval=-ENOMEM;
 		goto out_frames;

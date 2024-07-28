@@ -1,0 +1,5 @@
+启用动态调试，显示打印调试语句：
+echo 'module xcraft +p' | sudo tee /sys/kernel/debug/dynamic_debug/control
+
+不启用动态调试，不显示打印调试语句：
+echo 'module xcraft -p' | sudo tee /sys/kernel/debug/dynamic_debug/control
