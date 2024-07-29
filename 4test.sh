@@ -41,7 +41,6 @@ echo "开始挂载测试镜像..."
 sudo mount -o loop -t XCraft test.img /mnt/test
 echo "测试镜像挂载到/mnt/test! "
 sudo chmod -R 777 /mnt/test
-echo "测试镜像挂载到/mnt/test! "
 echo -e "\n"
 sleep 1
 

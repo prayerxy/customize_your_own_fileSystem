@@ -1,7 +1,7 @@
 # Directories
 SRC_DIR := src
 INC_DIR := include
-BUILDDIR := build
+BUILD_DIR := build
 TEST_DIR := test
 
 # Compiler and flags
@@ -15,32 +15,32 @@ xcraft-objs := $(patsubst %.o, $(SRC_DIR)/%.o, fs.o super.o inode.o file.o dir.o
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-MKFS = $(BUILDDIR)/mkfs.XCraft
+MKFS = $(BUILD_DIR)/mkfs.XCraft
 
-run: $(BUILDDIR) $(MKFS)
+run: $(BUILD_DIR) $(MKFS)
 	make -C $(KDIR) M=$(PWD) modules
-	mv *.symvers $(BUILDDIR)
-	mv *.ko $(BUILDDIR)
-	mv *.mod.c $(BUILDDIR)
-	mv *.mod.o $(BUILDDIR)
-	mv *.o $(BUILDDIR)
-	mv *.order $(BUILDDIR)
-	mv *.mod $(BUILDDIR)
-	mv .Module.symvers.cmd $(BUILDDIR)
-	mv .modules.order.cmd $(BUILDDIR)
-	mv .*.ko.cmd $(BUILDDIR)
-	mv .*.mod.cmd $(BUILDDIR)
-	mv .*.mod.o.cmd $(BUILDDIR)
-	mv .*.o.cmd $(BUILDDIR)
-	mv $(SRC_DIR)/*.o $(BUILDDIR)
-	mv $(SRC_DIR)/.*.o.cmd $(BUILDDIR)
+	mv *.symvers $(BUILD_DIR)
+	mv *.ko $(BUILD_DIR)
+	mv *.mod.c $(BUILD_DIR)
+	mv *.mod.o $(BUILD_DIR)
+	mv *.o $(BUILD_DIR)
+	mv *.order $(BUILD_DIR)
+	mv *.mod $(BUILD_DIR)
+	mv .Module.symvers.cmd $(BUILD_DIR)
+	mv .modules.order.cmd $(BUILD_DIR)
+	mv .*.ko.cmd $(BUILD_DIR)
+	mv .*.mod.cmd $(BUILD_DIR)
+	mv .*.mod.o.cmd $(BUILD_DIR)
+	mv .*.o.cmd $(BUILD_DIR)
+	mv $(SRC_DIR)/*.o $(BUILD_DIR)
+	mv $(SRC_DIR)/.*.o.cmd $(BUILD_DIR)
 
 IMAGE ?= test.img
 IMAGESIZE ?= 256
 
-$(BUILDDIR):
-	mkdir -p $(BUILDDIR)
-	chmod 755 $(BUILDDIR)
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+	chmod 755 $(BUILD_DIR)
 
 $(MKFS): $(SRC_DIR)/mkfs.c
 	$(CC) $(CFLAGS) -o $@ $<
@@ -51,12 +51,12 @@ $(IMAGE): $(MKFS)
 	./$< $(IMAGE)
 
 # Compile all test files in /test directory
-$(BUILDDIR)/%: $(TEST_DIR)/%.c
+$(BUILD_DIR)/%: $(TEST_DIR)/%.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 # Run all tests
-test: $(BUILDDIR) $(patsubst $(TEST_DIR)/%.c, $(BUILDDIR)/%, $(wildcard $(TEST_DIR)/*.c))
-	@for test in $(patsubst $(TEST_DIR)/%.c, $(BUILDDIR)/%, $(wildcard $(TEST_DIR)/*.c)); do \
+test: $(BUILD_DIR) $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(TEST_DIR)/*.c))
+	@for test in $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(TEST_DIR)/*.c)); do \
 		sudo $$test $(IMAGE); \
 	done
 
@@ -67,6 +67,6 @@ clean:
 	make -C $(KDIR) M=$(PWD) clean
 	rm -f *~ $(PWD)/*.ur-safe
 	rm -f $(MKFS) $(IMAGE)
-	rm -rf $(BUILDDIR)
+	rm -rf $(BUILD_DIR)
 
 .PHONY: all clean test check
