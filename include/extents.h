@@ -307,11 +307,12 @@ static unsigned int find_next_allocated_block(struct XCraft_ext_path *path)
             /* leaf */
             /*不是最后一个extent找下一个*/
             if (p->p_ext && p->p_ext != XCRAFT_LAST_EXTENT(p->p_hdr))
-                return le32_to_cpu(p->p_ext[1].ee_block);
+                return le32_to_cpu(p->p_ext[1].ee_block);//p_ext[1]找的是右边的extent
         }
         else
         {
             /* index */
+            //   当前path中的extent是叶子节点中的最后一个，所以回溯上层索引节点
             if (p->p_idx != XCRAFT_LAST_INDEX(p->p_hdr))
                 return le32_to_cpu(p->p_idx[1].ei_block);
         }
@@ -322,6 +323,7 @@ static unsigned int find_next_allocated_block(struct XCraft_ext_path *path)
 }
 
 // 检查重复区域并去除
+// inode:文件inode   newext:要插入的extent   path:搜索路径
 static unsigned int XCraft_check_overlap(struct inode *inode,
                                   struct XCraft_extent *newext,
                                   struct XCraft_ext_path *path)
@@ -337,7 +339,7 @@ static unsigned int XCraft_check_overlap(struct inode *inode,
 
     // 最后一层没有extent则不用检查是否重叠
     if (!path[depth].p_ext)
-        goto out;
+        goto out;//说明是一开始插入的extent
     b2 = le32_to_cpu(path[depth].p_ext->ee_block);
 
     // 说明此时extent与新的extent没有重叠区域，另外一种情况函数外面已经判断
@@ -874,6 +876,7 @@ out:
 }
 
 // 插入extent的核心函数
+// inode:文件inode   ppath:搜索路径   newext:要插入的extent
 static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path **ppath, struct XCraft_extent *newext)
 {
     struct XCraft_ext_path *path = *ppath;
@@ -949,7 +952,7 @@ static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path 
         next = XCraft_ext_next_leaf_block(path);
     if (next != XCRAFT_EXT_MAX_BLOCKS)
     {
-        // 下一个叶子节点中是否有位置
+        // 下一个叶子节点中是否有位置     next是最下面的最小值的复写  直接找第一个extent
         npath = XCraft_find_extent(inode, next, NULL);
         if (IS_ERR(npath))
             return PTR_ERR(npath);
@@ -1074,7 +1077,7 @@ static int XCraft_ext_map_blocks(struct inode *inode, struct XCraft_map_blocks *
             goto out;
         }
     }
-    // 运行到这说明此时并没有创建
+    // 运行到这说明此时并没有创建  或者  map->m_lblk不在ex的范围里面
     // 是否创建
     if (!create){
         err = 0;

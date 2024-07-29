@@ -255,7 +255,7 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
     if (wait)
         sync_dirty_buffer(sb_info->s_sbh);
 
-     // 回写块组描述符
+    // 回写块组描述符
     
     //s_gdb_count是组描述符占多少个块
     for(i=0;i<sb_info->s_gdb_count;i++){
