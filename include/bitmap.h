@@ -23,7 +23,7 @@ static inline int write_group_block_bitmap(struct XCraft_superblock_info *sbi, x
     memset(bfree, 0xff, XCRAFT_BLOCK_SIZE*bfree_block);
     i = 0;
     // printk("nr_used:%d\n",nr_used);
-    pr_debug("nr_used:%d\n",nr_used);
+    pr_debug("xcraft: nr_used:%d\n",nr_used);
     while(nr_used){
         uint64_t line = 0xffffffffffffffff;
         //从低位开始清0 直至清除nr_used个位
@@ -57,18 +57,18 @@ static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_inf
     int ret=0;
     if(s_La_init_group+1>=s_groups_count){
         // printk("No more group descriptor block\n");
-        pr_debug("No more group descriptor block\n");
+        pr_debug("xcraft: No more group descriptor block\n");
         return NULL;
     }
     // printk("new_gb_desc\n");
-    pr_debug("new_gb_desc\n");
+    pr_debug("xcraft: new_gb_desc\n");
     desc=(struct XCraft_group_desc *)bh->b_data;
     //说明前一个块组是常规块组
     // printk("s_La_init_group:%d,s_desc_per_block:%d\n",s_La_init_group,s_desc_per_block);
-    pr_debug("s_La_init_group:%d,s_desc_per_block:%d\n",s_La_init_group,s_desc_per_block);
+    pr_debug("xcraft: s_La_init_group:%d,s_desc_per_block:%d\n",s_La_init_group,s_desc_per_block);
     if(s_La_init_group+1<s_desc_per_block){
         // printk("s_La_init_group+1:%d\n",s_La_init_group+1);
-        pr_debug("s_La_init_group+1:%d\n",s_La_init_group+1);
+        pr_debug("xcraft: s_La_init_group+1:%d\n",s_La_init_group+1);
         if(XCraft_BG_ISINIT(desc[s_La_init_group+1].bg_flags)==0){
             //初始化这个块组
             //同时初始化inode bitmap block bitmap inode table
@@ -89,7 +89,7 @@ static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_inf
             flag=1;
             ret=s_La_init_group;
             // printk("new_gb_desc over\n");
-            pr_debug("new_gb_desc over\n");
+            pr_debug("xcraft: new_gb_desc over\n");
             goto out;
         }
     }
@@ -98,7 +98,7 @@ static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_inf
         next_init_group++;
         if(next_init_group+1>s_desc_per_block){
             // printk("No more group descriptor block\n");
-            pr_debug("No more group descriptor block\n");
+            pr_debug("xcraft: No more group descriptor block\n");
             return NULL;
         }
         blo_t++;
@@ -150,7 +150,7 @@ out:
         sbi->s_super->s_free_blocks_count=cpu_to_le32(free_blocks_count);
         sbi->s_La_init_group=s_La_init_group;//最后一个初始化的块组位置
         // printk("s_La_init_group:%d\n",s_La_init_group);
-        pr_debug("s_La_init_group:%d\n",s_La_init_group);
+        pr_debug("xcraft: s_La_init_group:%d\n",s_La_init_group);
         struct buffer_head *bh2 = sbi->s_sbh;
         struct XCraft_superblock *tmp = (struct XCraft_superblock *)bh2->b_data;
         memcpy((char *)tmp, (char *)sbi->s_super, sizeof(struct XCraft_superblock));
@@ -205,7 +205,7 @@ static inline uint32_t get_free_inode(struct XCraft_superblock_info *sbi){
             }
         }
         // printk("new desc now\n");
-        pr_debug("new desc now\n");
+        pr_debug("xcraft: new desc now\n");
         if(group_free_inodes_count(sbi, desc) == 0){
             desc = new_gb_desc(sbi,bh);
             group = sbi->s_La_init_group;
@@ -213,7 +213,7 @@ static inline uint32_t get_free_inode(struct XCraft_superblock_info *sbi){
                 return 0;
         }
         // printk("new desc over\n");
-        pr_debug("new desc over\n");
+        pr_debug("xcraft: new desc over\n");
     }
     //找到了空闲的inode及块组描述符desc
     // unsigned long*ifree_bitmap=kzalloc(XCRAFT_IFREE_PER_GROUP_BLO,GFP_KERNEL);
@@ -253,7 +253,7 @@ static inline int get_free_blocks(struct XCraft_superblock_info *sbi, int len){
             }
         }
         // printk("new desc now\n");
-        pr_debug("new desc now\n");
+        pr_debug("xcraft: new desc now\n");
         if(group_free_blocks_count(sbi, desc) < len){
             desc = new_gb_desc(sbi,bh);
             group = sbi->s_La_init_group;
@@ -261,7 +261,7 @@ static inline int get_free_blocks(struct XCraft_superblock_info *sbi, int len){
                 return 0;
         }
         // printk("new desc over\n");
-        pr_debug("new desc over\n");
+        pr_debug("xcraft: new desc over\n");
     }
     //找到了空闲的block及块组描述符desc
     uint32_t blocks_begin=0;

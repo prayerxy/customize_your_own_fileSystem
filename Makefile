@@ -32,20 +32,19 @@ run: $(BUILDDIR) $(MKFS)
 	mv .*.mod.cmd $(BUILDDIR)
 	mv .*.mod.o.cmd $(BUILDDIR)
 	mv .*.o.cmd $(BUILDDIR)
-
 	mv $(SRC_DIR)/*.o $(BUILDDIR)
 	mv $(SRC_DIR)/.*.o.cmd $(BUILDDIR)
 
 IMAGE ?= test.img
 IMAGESIZE ?= 256
-# To test max files(40920) in directory, the image size should be at least 159.85 MiB
-# 40920 * 4096(block size) ~= 159.85 MiB
 
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
+	chmod 755 $(BUILDDIR)
 
 $(MKFS): $(SRC_DIR)/mkfs.c
 	$(CC) $(CFLAGS) -o $@ $<
+	chmod 755 $(MKFS)
 
 $(IMAGE): $(MKFS)
 	dd if=/dev/zero of=${IMAGE} bs=1M count=${IMAGESIZE}

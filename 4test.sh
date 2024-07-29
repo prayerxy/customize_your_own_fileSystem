@@ -19,6 +19,7 @@ cd ..
 # 创建测试目录和测试镜像
 echo "开始创建测试目录和测试镜像..."
 sudo mkdir -p /mnt/test
+
 dd if=/dev/zero of=test.img bs=1M count=256
 echo "测试目录：/mnt/test"
 echo "镜像名: test.img"
@@ -36,7 +37,10 @@ sleep 1
 
 # 挂载测试镜像
 echo "开始挂载测试镜像..."
+# sudo mount -o loop -t XCraft test.img /mnt/test
 sudo mount -o loop -t XCraft test.img /mnt/test
+echo "测试镜像挂载到/mnt/test! "
+sudo chmod -R 777 /mnt/test
 echo "测试镜像挂载到/mnt/test! "
 echo -e "\n"
 sleep 1
