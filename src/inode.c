@@ -25,6 +25,8 @@ static const struct inode_operations XCraft_symlink_inode_operations;
 实现特殊版本的权限控制：
 
 每一个用户只能读写自己的文件，但是可以读别人的文件  不能写别人的文件
+root可以写任何/读任何文件
+
 */
 #include <linux/cred.h>  // 确保包含了定义 kuid_t 和 kgid_t 的头文件
 int XCraft_permission(struct inode *inode, int mask)
@@ -32,13 +34,20 @@ int XCraft_permission(struct inode *inode, int mask)
     kuid_t fsuid = current_fsuid();
     kgid_t fsgid = current_fsgid();
     umode_t mode = inode->i_mode;
+	pr_debug("xcraft: uid: %d %d\n", fsuid.val, inode->i_uid.val);
 
+	if (uid_eq(fsuid, GLOBAL_ROOT_UID)) {
+		return 0;
+	}
     // 检查写权限
     if (mask & MAY_WRITE) {
-        // 只有文件所有者才可以写
-        if (!uid_eq(fsuid, inode->i_uid)) {
-            return -EACCES;
-        }
+        // 只有文件所有者/root才可以写  
+		if (uid_eq(fsuid, inode->i_uid)) {
+			return 0;
+		}
+		else{
+			return -EACCES;// 其他情况都不允许写
+		}
     }
 
     // 检查读权限和执行权限
@@ -48,16 +57,15 @@ int XCraft_permission(struct inode *inode, int mask)
             return (mode & mask) == mask ? 0 : -EACCES;
         }
         if (gid_eq(fsgid, inode->i_gid)) {
-            // 检查组权限
+            // 检查组权限  >>3是因为组权限在mode中是从第4位开始的
             return (mode & (mask >> 3)) == (mask >> 3) ? 0 : -EACCES;
         }
-        // 检查其他用户权限
+        // 检查其他用户权限  >>6是因为其他用户权限在mode中是从第7位开始的
         return (mode & (mask >> 6)) == (mask >> 6) ? 0 : -EACCES;
     }
 
     return 0;// 其他情况都允许
 }
-
 
 // 删除所有的hash块
 // 只有判断其存在hash树了才会调用
@@ -65,7 +73,7 @@ int XCraft_permission(struct inode *inode, int mask)
 // 重点修改 很大问题
 static int XCraft_delete_hash_block(struct inode *inode)
 {
-	pr_debug("xcraft: begin delete_hash_block!\n");
+	pr_debug("begin delete_hash_block!\n");
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	unsigned int i_block;
 	struct buffer_head *bh, *bh2;
@@ -230,7 +238,7 @@ static int XCraft_delete_hash_block(struct inode *inode)
 	dx_del_release(frames);
 
 	put_blocks(sb_info, i_block, 1);
-	pr_debug("xcraft: finish delete_hash_block!\n");
+	pr_debug("finish delete_hash_block!\n");
 	return retval;
 
 out_bh:
@@ -646,13 +654,13 @@ struct inode *XCraft_iget(struct super_block *sb, unsigned long ino)
 	desc = get_group_desc2(sb_info, block_group);
 	if (!desc)
 	{
-		pr_debug("xcraft: desc is NULL!\n");
+		pr_debug("desc is NULL!\n");
 		return ERR_PTR(-EINVAL);
 	}
 
 	if (!XCraft_BG_ISINIT(desc->bg_flags))
 	{
-		pr_debug("xcraft: desc->bg_flags is not init!\n");
+		pr_debug("desc->bg_flags is not init!\n");
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -823,7 +831,7 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 #if MNT_IDMAP_REQUIRED()
 	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 #elif USER_NS_REQUIRED()
-	inode_init_owner(&init_user_ns, inode, dir, mode);//这里会设置inode的uid和gid
+	inode_init_owner(&init_user_ns, inode, dir, mode);
 #else
 	inode_init_owner(inode, dir, mode);
 #endif
@@ -849,6 +857,17 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 		inode->i_size = XCRAFT_BLOCK_SIZE;
 		inode->i_fop = &XCraft_dir_operations;
 		set_nlink(inode, 2); // . and ..
+		bh = sb_bread(sb, bno);
+		if (!bh)
+		{
+			ret = -EIO;
+			goto failed_inode;
+		}
+
+		memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
+		mark_buffer_dirty(bh);
+		brelse(bh);
+		// 此时inode已经分配好了，但是还没有插入目录项
 	}
 	else if (S_ISREG(mode))
 	{
@@ -863,17 +882,6 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 		set_nlink(inode, 1);
 	}
 
-	bh = sb_bread(sb, bno);
-	if (!bh)
-	{
-		ret = -EIO;
-		goto failed_inode;
-	}
-
-	memset(bh->b_data, 0, XCRAFT_BLOCK_SIZE);
-	mark_buffer_dirty(bh);
-	brelse(bh);
-	// 此时inode已经分配好了，但是还没有插入目录项
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	cur_time = current_time(inode);
@@ -1115,7 +1123,7 @@ again:
 		if (add_level && levels == XCRAFT_HTREE_LEVEL)
 		{
 			// 此时级数已经满了，不能加级
-			pr_debug("xcraft: XCraft_dx_add_entry: too many levels\n");
+			pr_debug("XCraft_dx_add_entry: too many levels\n");
 			err = -ENOSPC;
 			goto cleanup;
 		}
@@ -1138,7 +1146,7 @@ again:
 		// 不需要加级数的直接在前一层插入dx_entry
 		if (!add_level)
 		{
-			pr_debug("xcraft: 不需要添加级数\n");
+			pr_debug("不需要添加级数\n");
 			icount1 = icount / 2, icount2 = icount - icount1;
 			// 分裂位置的hash
 			hash2 = dx_get_hash(entries + icount1);
@@ -1167,7 +1175,7 @@ again:
 		}
 		else
 		{
-			pr_debug("xcraft: 需要添加级数\n");
+			pr_debug("需要添加级数\n");
 			// 需要添加级数
 			memcpy((char *)entries2, (char *)entries, icount * sizeof(struct dx_entry));
 
@@ -1180,7 +1188,7 @@ again:
 			root = (struct dx_root *)frames[0].bh->b_data;
 			// 级数增加
 			root->info.indirect_levels += 1;
-			pr_debug("xcraft: 现在的级数为: %d\n", root->info.indirect_levels);
+			pr_debug("现在的级数为: %d\n", root->info.indirect_levels);
 			// mark_buffer_dirty
 			// 修改了dx_root，新分配的newblock
 			mark_buffer_dirty(frame->bh);
@@ -1212,7 +1220,7 @@ cleanup:
 // 0表示添加目录项成功
 static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 {
-	struct inode *dir = dentry->d_parent->d_inode;//获取父目录的inode  父目录是dir
+	struct inode *dir = dentry->d_parent->d_inode;
 	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
 	struct buffer_head *bh = NULL;
 	struct super_block *sb;
@@ -1224,7 +1232,6 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 	sb = dir->i_sb;
 	// 块大小
 	blocksize = sb->s_blocksize;
-	
 
 	if (!dentry->d_name.len)
 		return -EINVAL;
@@ -1238,13 +1245,13 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 		if (!retval)
 			return retval;
 		// 添加不成功
-		pr_debug("xcraft: hash tree add entry failed\n");
+		pr_debug("hash tree add entry failed\n");
 		goto end;
 	}
 
 	// 遍历第一个块，此块已经被我们分配过
 	i_block = le32_to_cpu(dir_info->i_block[0]); // 261
-	pr_debug("xcraft: XCraft_add_entry i_block: %d\n", i_block);
+	pr_debug("XCraft_add_entry i_block: %d\n", i_block);
 	bh = sb_bread(sb, i_block);
 	if (!bh)
 	{
@@ -1253,11 +1260,11 @@ static int XCraft_add_entry(struct dentry *dentry, struct inode *inode)
 	}
 
 	retval = add_dirent_to_buf(dentry, inode, NULL, bh);
-	pr_debug("xcraft: add_dirent_to_buf retval: %d\n", retval);
+	pr_debug("add_dirent_to_buf retval: %d\n", retval);
 	// 插入成功
 
 	if (retval == -EEXIST)
-		pr_debug("xcraft: same name of dentry has been existed\n");
+		pr_debug("same name of dentry has been existed\n");
 	else if (retval == -ENOSPC)
 		// 开始建立哈希树
 		retval = XCraft_make_hash_tree(dentry, dir, inode, bh);
@@ -1268,7 +1275,7 @@ end:
 // 删除目录项操作函数
 static int XCraft_delete_entry(struct inode *dir, struct XCraft_dir_entry *de_del, struct buffer_head *bh)
 {
-	pr_debug("xcraft: begin XCraft_delete_entry\n");
+	pr_debug("begin XCraft_delete_entry\n");
 	// 此时可能是哈希树，也可能不是哈希树
 	// 哈希树我们扫一个块，不是哈希树我们便扫要分裂成哈希树的目录项限制个数
 	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
@@ -1304,7 +1311,7 @@ static int XCraft_delete_entry(struct inode *dir, struct XCraft_dir_entry *de_de
 		reclen = le16_to_cpu(de->rec_len);
 		if (de == de_del)
 		{
-			pr_debug("xcraft: has been found!\n");
+			pr_debug("has been found!\n");
 			// 此时已经发现了目录项
 			next = (struct XCraft_dir_entry *)((char *)de + reclen);
 			// 由flag判断要前推多少
@@ -1348,7 +1355,7 @@ static int XCraft_delete_entry(struct inode *dir, struct XCraft_dir_entry *de_de
 	// 此时我们需要mark_buffer_dirty
 	mark_buffer_dirty(bh);
 	brelse(bh);
-	pr_debug("xcraft: finish XCraft_delete_entry!\n");
+	pr_debug("finish XCraft_delete_entry!\n");
 	return 0;
 }
 
@@ -1399,7 +1406,7 @@ static struct buffer_head *XCraft_dx_find_entry(struct inode *dir,
 		ret = NULL;
 		goto out;
 	}
-	pr_debug("xcraft: in dx_find_entry ,dx_probe success!\n");
+	pr_debug("in dx_find_entry ,dx_probe success!\n");
 
 	block = dx_get_block(frame->at);
 	bh = sb_bread(sb, block);
@@ -1482,7 +1489,7 @@ static struct buffer_head *XCraft_find_entry(struct inode *dir,
 	if (XCraft_INODE_ISHASH_TREE(dir_info->i_flags))
 	{
 		// 此时已经是哈希树
-		pr_debug("xcraft: begin dx_Find_entry!\n");
+		pr_debug("begin dx_Find_entry!\n");
 		ret = XCraft_dx_find_entry(dir, entry, res_dir);
 		if (!IS_ERR(ret) || PTR_ERR(ret) != ERR_BAD_DX_DIR)
 			// 此时表示已经找到
@@ -1555,18 +1562,56 @@ static int XCraft_create(struct inode *dir,
 	// 获取inode_info
 	struct XCraft_inode_info *inode_info;
 	int ret;
+    char *buf;
+    char *path;
+	struct dentry *parent_dentry;
+    // 分配缓冲区来存储路径
+    buf = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!buf) {
+        ret = -ENOMEM;
+        return ret;
+    }
+	// 获取父目录的 dentry
+	parent_dentry = d_find_alias(dir);
+	if (!parent_dentry) {
+		ret = -ENOENT;
+		kfree(buf);
+		return ret;
+	}
+    // 获取当前目录的路径
+    path = dentry_path_raw(parent_dentry, buf, PATH_MAX);
+	dput(parent_dentry);  // 释放 dentry
+	kfree(buf);
+    if (IS_ERR(path)) {
+        ret = PTR_ERR(path);
+		return ret;
+    }
+	pr_debug("xcraft: path: %s %d\n", path,strcmp(path, "/"));
+	if (strcmp(path, "/") == 0) {
+		ret=0;
+	}else{
+		ret = XCraft_permission(dir, MAY_WRITE);
+	}
+
+	if (ret)
+	{
+		printk("xcraft: XCraft_create: permission denied\n");
+		return -EACCES;
+	}
+	
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	struct timespec64 cur_time;
 #endif
-
 	// check filename length
 	if (strlen(dentry->d_name.name) > XCRAFT_NAME_LEN)
 		return -ENAMETOOLONG;
 
 	// 获取inode
+	
+	
 	inode = XCraft_new_inode(dir, &dentry->d_name, mode);
-
+	
 	if (IS_ERR(inode))
 	{
 		ret = PTR_ERR(inode);
@@ -1594,15 +1639,14 @@ static int XCraft_create(struct inode *dir,
 		inc_nlink(dir);
 	dir_info->i_nr_files += 1;
 	// 打印目录inode信息
-	pr_debug("xcraft: dir_inode->i_nlink: %d", dir->i_nlink);
-	pr_debug("xcraft: dir_inode_info->i_nr_files: %d", dir_info->i_nr_files);
-	pr_debug("xcraft: 添加的目录项的i_nlink: %d", inode->i_nlink);
-	pr_debug("xcraft: 添加的目录项的i_nr_files: %d", inode_info->i_nr_files);
+	pr_debug("dir_inode->i_nlink: %d", dir->i_nlink);
+	pr_debug("dir_inode_info->i_nr_files: %d", dir_info->i_nr_files);
+	pr_debug("添加的目录项的i_nlink: %d", inode->i_nlink);
+	pr_debug("添加的目录项的i_nr_files: %d", inode_info->i_nr_files);
 	mark_inode_dirty(dir);
 
 	// setup dentry
 	d_instantiate(dentry, inode);
-
 	return 0;
 
 end_inode:
@@ -1618,12 +1662,12 @@ end:
 // lookup
 static struct dentry *XCraft_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
-	pr_debug("xcraft: begin XCraft_lookup\n");
+	pr_debug("begin XCraft_lookup\n");
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode = NULL;
 	struct buffer_head *bh = NULL;
 	struct XCraft_dir_entry *de = NULL;
-	pr_debug("xcraft: filename: %s\n", dentry->d_name.name);
+	pr_debug("filename: %s\n", dentry->d_name.name);
 
 	// 检查文件名长度
 	if (dentry->d_name.len > XCRAFT_NAME_LEN)
@@ -1648,8 +1692,8 @@ search_end:
 	return NULL;
 }
 
-// link  作用：创建硬链接  old_dentry是要创建硬链接的文件，dir是要创建硬链接的目录，dentry是硬链接的目录项
-
+// link
+// link作用是 创建一个新的目录项，指向一个已经存在的文件
 static int XCraft_link(struct dentry *old_dentry,
 					   struct inode *dir, struct dentry *dentry)
 {
@@ -1658,13 +1702,12 @@ static int XCraft_link(struct dentry *old_dentry,
 	int ret;
 	// 获取dir对应的dir_info
 	struct XCraft_inode_info *dir_info = XCRAFT_I(dir);
-
-	//硬链接  权限检查 1. 目录权限 2. 文件权限
-	ret=XCraft_permission(dir, MAY_WRITE); //在dir下面创建硬链接
-	ret|=XCraft_permission(inode, MAY_READ);
-	if(ret)
+	//硬链接  权限检查 读写权限  目录下可以创建硬链接
+	ret = XCraft_permission(inode, MAY_READ | MAY_WRITE);
+	if(ret){
+		printk("xcraft: XCraft_link: permission denied\n");
 		return -EACCES;
-
+	}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	struct timespec64 cur_time;
 #endif
@@ -1703,7 +1746,7 @@ static int XCraft_link(struct dentry *old_dentry,
 }
 
 // unlink
-// dir是目录，dentry是目录下的目录项  删除下面的文件或者目录
+// dir是目录，dentry是目录下的目录项
 static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 {
 	struct super_block *sb = dir->i_sb;
@@ -1721,11 +1764,12 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 	// 获取此inode的ino，后面位图释放时使用
 	uint32_t ino = inode->i_ino;
 	unsigned int i_block;
-
 	//先进行权限检查
-	retval = XCraft_permission(dir, MAY_WRITE);
-	if (retval)
+	retval = XCraft_permission(inode, MAY_WRITE);
+	if (retval){
+		printk("xcraft: XCraft_unlink: permission denied\n");
 		return -EACCES;
+	}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	struct timespec64 cur_time;
 #endif
@@ -1737,14 +1781,14 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 		retval = -ENOENT;
 		goto end;
 	}
-	pr_debug("xcraft: XCraft_unlink find_entry success\n");
+	pr_debug("XCraft_unlink find_entry success\n");
 	// 由获取到的目录项进行删除
-	pr_debug("xcraft: de->name: %s\n", de->name);
+	pr_debug("de->name: %s\n", de->name);
 	retval = XCraft_delete_entry(dir, de, bh);
 	if (retval)
 		goto end;
 
-	pr_debug("xcraft: XCraft_unlink delete_entry success\n");
+	pr_debug("XCraft_unlink delete_entry success\n");
 	if (S_ISLNK(inode->i_mode))
 		goto end;
 
@@ -1770,14 +1814,14 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 
 	if (S_ISDIR(inode->i_mode) && inode->i_nlink > 2)
 	{
-		pr_debug("xcraft: 此时不用删除目录\n");
+		pr_debug("此时不用删除目录\n");
 		inode_dec_link_count(inode);
 		goto end;
 	}
 
 	if (S_ISREG(inode->i_mode) && inode->i_nlink > 1)
 	{
-		pr_debug("xcraft: 此时不用删除文件\n");
+		pr_debug("此时不用删除文件\n");
 		inode_dec_link_count(inode);
 		goto end;
 	}
@@ -1801,7 +1845,7 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 		{
 			// 调用释放hash树的函数来实现
 			retval = XCraft_delete_hash_block(inode);
-			pr_debug("xcraft: XCraft_unlink delete_hash_block retval: %d\n", retval);
+			pr_debug("XCraft_unlink delete_hash_block retval: %d\n", retval);
 			if (retval)
 				// 删除失败
 				goto end;
@@ -1824,7 +1868,7 @@ static int XCraft_unlink(struct inode *dir, struct dentry *dentry)
 		// 文件 扩展树和索引块方式
 		// retval = XCraft_delete_file_block(inode);
 		retval = XCraft_ext_delete_file_block(inode);
-		pr_debug("xcraft: XCraft_unlink delete_file_block retval: %d\n", retval);
+		pr_debug("XCraft_unlink delete_file_block retval: %d\n", retval);
 		if (retval)
 			goto end;
 	}
@@ -1886,10 +1930,11 @@ static int XCraft_symlink(struct inode *dir,
 	struct XCraft_inode_info *ci_dir = XCRAFT_I(dir);
 	int ret = 0;
 	//检查权限，符号链接需要写权限
-	ret=XCraft_permission(dir, MAY_WRITE);
-	ret|=XCraft_permission(inode, MAY_READ);
-	if(ret)
+	ret=XCraft_permission(inode, MAY_WRITE);
+	if(ret){
+		printk("xcraft: permission denied in symlink\n");
 		return ret;
+	}
 
 	// 检查inode
 	if (IS_ERR(inode))
@@ -1929,7 +1974,7 @@ static int XCraft_mkdir(struct mnt_idmap *id,
 						struct dentry *dentry,
 						umode_t mode)
 {
-	pr_debug("xcraft: begin mkdir\n");
+	pr_debug("begin mkdir\n");
 	return XCraft_create(id, dir, dentry, mode | S_IFDIR, 0);
 }
 
@@ -1939,7 +1984,7 @@ static int XCraft_mkdir(struct user_namespace *ns,
 						struct dentry *dentry,
 						umode_t mode)
 {
-	pr_debug("xcraft: begin mkdir\n");
+	pr_debug("begin mkdir\n");
 	return XCraft_create(ns, dir, dentry, mode | S_IFDIR, 0);
 }
 #else
@@ -1947,7 +1992,7 @@ static int XCraft_mkdir(struct inode *dir,
 						struct dentry *dentry,
 						umode_t mode)
 {
-	pr_debug("xcraft: begin mkdir\n");
+	pr_debug("begin mkdir\n");
 	return XCraft_create(dir, dentry, mode | S_IFDIR, 0);
 }
 #endif
@@ -1959,14 +2004,13 @@ static int XCraft_rmdir(struct inode *dir, struct dentry *dentry)
 	// 要删除目录的inode_info xi
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	int ret;
-	//权限检查  如果此用户不是此目录的拥有者，或者不是root用户，返回错误
-	ret=XCraft_permission(dir, MAY_WRITE);//删除目录需要写权限
-	ret|=XCraft_permission(inode, MAY_WRITE);
+
+	//权限检查  如果此用户不是此dentry的拥有者，或者不是root用户，返回错误
+	ret =XCraft_permission(inode, MAY_WRITE);
 	if(ret){
-		printk("permission denied in rmdir\n");
+		printk("xcraft: permission denied in rmdir\n");
 		return -EACCES;//权限不够
 	}
-
 	// 判断此文件夹是否为空
 	// 如果其下有目录的话，它的i_nlink字段会大于2
 	if (inode->i_nlink > 2)
@@ -2003,7 +2047,7 @@ static int XCraft_rename(struct inode *old_dir,
 						 unsigned int flags)
 #endif
 {
-	pr_debug("xcraft: begin rename\n");
+	pr_debug("begin rename\n");
 	struct XCraft_inode_info *old_dir_info = XCRAFT_I(old_dir);
 	struct XCraft_inode_info *new_dir_info = XCRAFT_I(new_dir);
 	// old_dentry中关联的inode和new_dentry中关联的inode
@@ -2017,6 +2061,72 @@ static int XCraft_rename(struct inode *old_dir,
 	// 最终的返回字段
 	int retval;
 	retval = 0;
+
+	//权限检查是否有对olddir,newdir以及oldinode的写权限
+	char *buf1,*buf2;
+	char *path1,*path2;
+	struct dentry* parent_dentry1,*parent_dentry2;
+	buf1 = kmalloc(PATH_MAX, GFP_KERNEL);
+	buf2 = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!buf1 || !buf2) {
+		retval = -ENOMEM;
+		goto end_rename;
+	}
+	// 获取父目录的 dentry
+	parent_dentry1 = d_find_alias(old_dir);
+	parent_dentry2 = d_find_alias(new_dir);
+	if (!parent_dentry1 || !parent_dentry2) {
+		retval = -ENOENT;
+		kfree(buf1);
+		kfree(buf2);
+		goto end_rename;
+	}
+	// 获取当前目录的路径
+	path1 = dentry_path_raw(parent_dentry1, buf1, PATH_MAX);
+	path2 = dentry_path_raw(parent_dentry2, buf2, PATH_MAX);
+	dput(parent_dentry1);  // 释放 dentry
+	dput(parent_dentry2);  // 释放 dentry
+	kfree(buf1);
+	kfree(buf2);
+	if (IS_ERR(path1) || IS_ERR(path2)) {
+		retval = PTR_ERR(path1);
+		goto end_rename;
+	}
+	pr_debug("xcraft: path1: %s\n", path1);
+	pr_debug("xcraft: path2: %s\n", path2);
+
+	if(strcmp(path1, "/") == 0){
+		retval=0;
+	}
+	else{
+		retval = XCraft_permission(old_dir, MAY_WRITE);
+	}
+	if(retval){
+		printk("xcraft: permission denied in rename\n");
+		goto end_rename;
+	}
+	if(strcmp(path2, "/") == 0){
+		retval=0;
+	}
+	else{
+		retval = XCraft_permission(new_dir, MAY_WRITE);
+	}
+	if(retval){
+		printk("xcraft: permission denied in rename\n");
+		goto end_rename;
+	}
+
+	//拥有两个目录的写权限，接下来检查old_dentry的写权限
+	retval = XCraft_permission(d_inode(old_dentry), MAY_WRITE);
+	if(retval){
+		printk("xcraft: XCraft_rename: permission denied\n");
+		goto end_rename;
+	}
+	//注意新dentry还没有创建，所以不用检查新dentry的写权限
+
+	//说明权限检查通过
+
+
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	struct timespec64 cur_time;
@@ -2095,7 +2205,7 @@ static int XCraft_rename(struct inode *old_dir,
 	// old_inode我们进行了访问,更新时间字段
 	old_inode->i_ctime = current_time(old_inode);
 	mark_inode_dirty(old_inode);
-	pr_debug("xcraft: rename ok!\n");
+	pr_debug("rename ok!\n");
 
 end_rename:
 	brelse(old_bh);
@@ -2125,3 +2235,4 @@ static const struct inode_operations XCraft_inode_operations = {
 static const struct inode_operations XCraft_symlink_inode_operations = {
 	.get_link = XCraft_get_link,
 };
+

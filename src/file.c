@@ -438,7 +438,7 @@ static void XCraft_ext_readahead(struct readahead_control *rac)
 #else
 static int XCraft_ext_readpage(struct file *file, struct page *page)
 {
-
+	//检查是否有读取权限inode索引的文件
 	return mpage_readpage(page, XCraft_ext_file_get_block);
 }
 #endif
@@ -804,12 +804,30 @@ loff_t XCraft_llseek(struct file *file, loff_t offset, int whence)
 // 读操作
 static ssize_t XCraft_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
+	//获取file指针
+	struct file *file = iocb->ki_filp;
+	struct inode*inode=file->f_inode;
+
+	int ret=XCraft_permission(inode, MAY_READ);
+	if(ret){
+		printk("xcraft: XCraft_permission error in read\n");
+		return ret;
+	}
 	return generic_file_read_iter(iocb, to);
 }
 
 // 写操作
 static ssize_t XCraft_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
+	//获取file指针
+	struct file *file = iocb->ki_filp;
+	struct inode*inode=file->f_inode;
+
+	int ret=XCraft_permission(inode, MAY_WRITE);
+	if(ret){
+		printk("xcraft: XCraft_permission error in write\n");
+		return ret;
+	}
 	return generic_file_write_iter(iocb, from);
 }
 

@@ -325,7 +325,7 @@ extern const struct address_space_operations XCraft_aops;
 // static inline int get_block_group_shift(struct XCraft_superblock_info *sb_info, uint32_t block);
 
 
-
+int XCraft_permission(struct inode *inode, int mask);
 struct XCraft_group_desc* get_group_desc(struct XCraft_superblock_info *sbi, xcraft_group_t group, struct buffer_head *bh);
 struct XCraft_group_desc* get_group_desc2(struct XCraft_superblock_info *sbi,xcraft_group_t group);
 int group_free_inodes_count(struct XCraft_superblock_info *sbi,struct XCraft_group_desc* desc);
