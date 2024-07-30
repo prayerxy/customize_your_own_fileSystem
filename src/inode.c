@@ -34,7 +34,7 @@ int XCraft_permission(struct inode *inode, int mask)
     kuid_t fsuid = current_fsuid();
     kgid_t fsgid = current_fsgid();
     umode_t mode = inode->i_mode;
-	pr_debug("xcraft: uid: %d %d\n", fsuid.val, inode->i_uid.val);
+	pr_debug("uid: %d %d\n", fsuid.val, inode->i_uid.val);
 
 	if (uid_eq(fsuid, GLOBAL_ROOT_UID)) {
 		return 0;
@@ -1586,7 +1586,7 @@ static int XCraft_create(struct inode *dir,
         ret = PTR_ERR(path);
 		return ret;
     }
-	pr_debug("xcraft: path: %s %d\n", path,strcmp(path, "/"));
+	pr_debug("path: %s %d\n", path,strcmp(path, "/"));
 	if (strcmp(path, "/") == 0) {
 		ret=0;
 	}else{
@@ -2092,8 +2092,8 @@ static int XCraft_rename(struct inode *old_dir,
 		retval = PTR_ERR(path1);
 		goto end_rename;
 	}
-	pr_debug("xcraft: path1: %s\n", path1);
-	pr_debug("xcraft: path2: %s\n", path2);
+	pr_debug("path1: %s\n", path1);
+	pr_debug("path2: %s\n", path2);
 
 	if(strcmp(path1, "/") == 0){
 		retval=0;

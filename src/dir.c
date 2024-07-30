@@ -10,7 +10,7 @@
 // eno是除.和..之外第几个目录项开始遍历搜索 eno从0开始
 // i_block = xi->i_block[0]
 static int XCraft_dx_readdir(struct inode *inode, struct dir_context *ctx, int eno, unsigned int i_block){
-	pr_debug("xcraft: begin dx_readdir!\n");
+	pr_debug("begin dx_readdir!\n");
 	struct XCraft_inode_info *xi = XCRAFT_I(inode);
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
@@ -172,7 +172,7 @@ root_again:
 	}
 	
 	dx_release(frames);
-	pr_debug("xcraft: over dx_readdir!\n");
+	pr_debug("over dx_readdir!\n");
 	return retval;
 out_bh:
 	if(bh)
@@ -211,7 +211,7 @@ static int XCraft_readdir(struct file *dir, struct dir_context *ctx){
 	if(XCraft_INODE_ISHASH_TREE(xi->i_flags)){
 		// 哈希树情况，遍历hash树查找目录项
 		ret = XCraft_dx_readdir(inode, ctx, eno, i_block);
-		pr_debug("xcraft: XCraft_dx_readdir ret: %d\n",ret);
+		pr_debug("XCraft_dx_readdir ret: %d\n",ret);
 	}
 	else{
 		int count = 0;
