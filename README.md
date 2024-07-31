@@ -25,10 +25,23 @@
 
 
 
+
 ### 提交记录说明
 
 - prayerxy、谢畅均为谢畅提交
 - cmzjr 是张景瑞提交
+
+### 参考资料
+
+- 参考ext4源码，[ext4](https://github.com/torvalds/linux/tree/master/fs/ext4)，学习一些功能的原理
+
+- 参考simplefs框架编写文件系统，[simplefs](https://github.com/psankar/simplefs)，学习从0搭建一个文件系统的框架。
+
+- 遵守**GNU General Public License**
+
+  
+
+
 
 ### 项目的结构说明
 
@@ -170,4 +183,3 @@ cat 1.txt 读取文件内容 调用XCraft_file_read_iter
 ls 显示目录项 调用XCraft_readdir
 mv /mnt/test/dir1/1.txt /mnt/test/dir2/ 剪切命令 调用XCraft_rename函数
 ```
-
