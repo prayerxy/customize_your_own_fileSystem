@@ -141,7 +141,7 @@ static int XCraft_ext_file_get_block(struct inode *inode,
 	struct XCraft_inode_info *inode_info = XCRAFT_I(inode);
 	// 创建映射map
 	struct XCraft_map_blocks map;
-	u64 maxfileblocks = XCraft_ext_maxfileblocks(inode);
+	// u64 maxfileblocks = XCraft_ext_maxfileblocks(inode);
 	map.m_pblk = 0;
 	map.m_lblk = iblock;
 	// 映射一个extent的长度
@@ -153,8 +153,10 @@ static int XCraft_ext_file_get_block(struct inode *inode,
 	i_blocks = ceil_div(i_size, XCRAFT_BLOCK_SIZE);
 
 	ret = 0;
-	if (iblock >= maxfileblocks)
-		return -EFBIG;
+	// if (iblock >= maxfileblocks){
+	// 	printk("yes\n");
+	// 	return -EFBIG;
+	// }
 	
 	if (iblock >= i_blocks && !create)
 	{
@@ -208,8 +210,10 @@ static int XCraft_file_get_block(struct inode *inode,
 
 	max_file_blocks = XCRAFT_N_DIRECT + XCRAFT_N_INDIRECT * bno_num_per_block + XCRAFT_N_DOUBLE_INDIRECT * bno_num_per_block * bno_num_per_block;
 
-	if (iblock >= max_file_blocks)
+	if (iblock >= max_file_blocks){
+		printk("yes2\n");
 		return -EFBIG;
+	}
 
 	// 当前自身文件的内容大小
 	unsigned int i_size = inode->i_size;

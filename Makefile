@@ -42,7 +42,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 	chmod 755 $(BUILD_DIR)
 
-$(MKFS): $(SRC_DIR)/mkfs.c
+$(MKFS): $(SRC_DIR)/mkfs.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ $<
 	chmod 755 $(MKFS)
 
@@ -51,7 +51,7 @@ $(IMAGE): $(MKFS)
 	./$< $(IMAGE)
 
 # Compile all test files in /test directory
-$(BUILD_DIR)/%: $(TEST_DIR)/%.c
+$(BUILD_DIR)/%: $(TEST_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ $<
 
 # Generate list of built tests

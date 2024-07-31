@@ -7,7 +7,7 @@
 #include <dirent.h>
 
 #define NUM_DIRS 10000
-#define FILES_PER_DIR 0
+#define FILES_PER_DIR 1
 #define PATH_PREFIX "/mnt/test/"
 
 /*
@@ -18,7 +18,7 @@
 void create_dirs_and_files() {
     char dir_path[256];
     char file_path[256];
-    char content[100] = "Hello World!";
+    char content[100] = "Hello World! we are praye4u.";
     FILE *fp;
 
 
