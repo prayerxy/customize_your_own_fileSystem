@@ -35,7 +35,7 @@
 
 - 参考ext4源码，[ext4](https://github.com/torvalds/linux/tree/master/fs/ext4)，学习一些功能的原理
 
-- 参考simplefs框架编写文件系统，[simplefs](https://github.com/psankar/simplefs)，学习从0搭建一个文件系统的框架。
+- 参考simplefs框架编写文件系统，[simplefs](https://github.com/sysprog21/simplefs/tree/master)学习从0搭建一个文件系统的框架。
 
 - 遵守**GNU General Public License**
 
