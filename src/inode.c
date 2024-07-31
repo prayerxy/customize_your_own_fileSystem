@@ -780,8 +780,9 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 	}
 
 	// 检查inode是否还有空余的
-	if (le32_to_cpu(disk_sb->s_free_inodes_count) == 0 || le32_to_cpu(disk_sb->s_free_blocks_count) == 0)
+	if (le32_to_cpu(disk_sb->s_free_inodes_count) == 0 || le32_to_cpu(disk_sb->s_free_blocks_count) == 0){
 		return ERR_PTR(-ENOSPC);
+	}
 
 	// 分配inode
 	// 返回0表示没有找到，因为根目录inode已经分配了
@@ -790,8 +791,9 @@ struct inode *XCraft_new_inode(struct inode *dir, struct qstr *qstr, int mode)
 	// 要修改此获取函数
 	ino = get_free_inode(sb_info);
 
-	if (!ino)
+	if (!ino){
 		return ERR_PTR(-ENOSPC);
+	}
 	// 获取ino对应的inode
 	inode = XCraft_iget(sb, ino);
 	if (IS_ERR(inode))
@@ -1063,7 +1065,7 @@ static int XCraft_dx_add_entry(struct dentry *dentry, struct inode *inode)
 	// 初始化hinfo
 	hinfo.hash = 0;
 	hinfo.hash_version = XCRAFT_HTREE_VERSION;
-
+	
 again:
 	restart = 0;
 	frame = dx_probe(&dentry->d_name, dir, &hinfo, frames, &err);

@@ -40,9 +40,9 @@ static int XCraft_dirhash(const char *name, int len, struct XCraft_hash_info *hi
 
 static inline uint32_t dx_node_limit(void)
 {
-	// unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(__le16))  / sizeof(struct dx_entry);
-	// return limit;
-	return 3;
+	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(__le16))  / sizeof(struct dx_entry);
+	return limit;
+	
 }
 
 static inline void dx_set_block(struct dx_entry *entry, uint32_t value)
@@ -67,9 +67,10 @@ static inline uint32_t dx_get_hash(struct dx_entry *entry)
 
 static inline uint32_t dx_root_limit(void)
 {
-	// unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(struct dx_root_info)) / sizeof(struct dx_entry);
-	// return limit;
-	return 3;
+	unsigned int limit = (XCRAFT_BLOCK_SIZE - sizeof(struct dx_root_info)) / sizeof(struct dx_entry);
+	//511
+	return limit;
+	
 }
 
 static inline void dx_set_count(struct dx_entry *entries, unsigned value)

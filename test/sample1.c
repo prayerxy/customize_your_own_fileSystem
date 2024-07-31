@@ -5,7 +5,7 @@
 #include <time.h>
 int main(){
     //文件系统路径  nku.txt不存在时会自动创建？
-    printf("####################\n");
+    printf("###########test 1#########\n");
     char path[100] = "/mnt/test/nku.txt";
     //文件内容
     char content[100] = "Hello World!";
@@ -41,6 +41,6 @@ int main(){
     }
     //输出文件读写性能
     printf("file write performance: %f\n", (double)(end - start) / CLOCKS_PER_SEC);
-    printf("####################\n");
+    printf("##########test 1##########\n");
     return 0;
 }

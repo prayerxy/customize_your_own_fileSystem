@@ -123,7 +123,7 @@ struct XCraft_group_desc{
 #define XCRAFT_dentry_LIMIT 20
 
 // hash树的层数
-#define XCRAFT_HTREE_LEVEL 3
+#define XCRAFT_HTREE_LEVEL 6
 
 // 判断indirect_levels字段是否超出范围
 #define ERR_BAD_DX_DIR	-75000

@@ -14,10 +14,10 @@
 /*最大深度*/
 #define XCRAFT_MAX_EXTENT_DEPTH 5
 /*一个extent有几个物理磁盘块*/
-#define XCRAFT_EXT_BLOCKS_NUM 3
+#define XCRAFT_EXT_BLOCKS_NUM 10
 
 /*一个XCraft_extent的ee_len最大值*/
-#define XCRAFT_INIT_MAX_LEN 7
+#define XCRAFT_INIT_MAX_LEN 100
 
 #define EFSBADCRC EBADMSG    /* Bad CRC detected */
 #define EFSCORRUPTED EUCLEAN /* Filesystem is corrupted */
@@ -92,19 +92,17 @@ static int XCraft_ext_space_root_idx(struct XCraft_inode_info *xi)
 // 叶子节点最多容纳多少个extent
 static int XCraft_ext_space_leaf(struct inode *inode)
 {
-    // int size;
-    // size = (inode->i_sb->s_blocksize - sizeof(struct XCraft_extent_header)) / sizeof(struct XCraft_extent);
-    // return size;
-    return 6;
+    int size;
+    size = (inode->i_sb->s_blocksize - sizeof(struct XCraft_extent_header)) / sizeof(struct XCraft_extent);
+    return size;
 }
 
 // 索引节点最多容纳多少个idx
 static int XCraft_ext_space_idx(struct inode *inode)
 {
-    // int size;
-    // size = (inode->i_sb->s_blocksize - sizeof(struct XCraft_extent_header)) / sizeof(struct XCraft_extent_idx);
-    // return size;
-    return 6;
+    int size;
+    size = (inode->i_sb->s_blocksize - sizeof(struct XCraft_extent_header)) / sizeof(struct XCraft_extent_idx);
+    return size;
 }
 
 // extent tree初始化

@@ -19,10 +19,10 @@ cd ..
 # 创建测试目录和测试镜像
 echo "开始创建测试目录和测试镜像..."
 sudo mkdir -p /mnt/test
-dd if=/dev/zero of=test.img bs=1M count=256
+dd if=/dev/zero of=test.img bs=1M count=1024
 echo "测试目录：/mnt/test"
 echo "镜像名: test.img"
-echo "镜像大小: 256MB"
+echo "镜像大小: 1GB"
 echo -e "\n"
 sleep 1
 

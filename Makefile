@@ -54,12 +54,26 @@ $(IMAGE): $(MKFS)
 $(BUILD_DIR)/%: $(TEST_DIR)/%.c
 	$(CC) $(CFLAGS) -o $@ $<
 
-# Run all tests
-test: $(BUILD_DIR) $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(TEST_DIR)/*.c))
-	@for test in $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(TEST_DIR)/*.c)); do \
+# Generate list of built tests
+BUILD_TESTS := $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(TEST_DIR)/*.c))
+
+# Run all tests or a specific test
+test: $(BUILD_DIR) $(BUILD_TESTS)
+ifeq ($(filter-out $@,$(MAKECMDGOALS)),)
+	@for test in $(BUILD_TESTS); do \
 		sudo $$test $(IMAGE); \
 	done
+else
+	@k=$(filter-out $@,$(MAKECMDGOALS)); \
+	if [ $$k -gt 0 ] && [ $$k -le $(words $(BUILD_TESTS)) ]; then \
+		TEST=$$(echo $(BUILD_TESTS) | tr ' ' '\n' | sed -n "$$k"p); \
+		sudo $$TEST $(IMAGE); \
+	else \
+		echo "Test number $$k is out of range."; \
+	fi
+endif
 
+# Check the image
 check: all
 	script/test.sh $(IMAGE) $(IMAGESIZE) $(MKFS)
 
@@ -70,3 +84,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 .PHONY: all clean test check
+
+# Prevent make from treating 'k' as a file name
+%:
+	@:

@@ -309,20 +309,27 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
     return 0;
 }
 
-// statfs
-static int XCraft_statfs(struct dentry *dentry, struct kstatfs *buf){
+static int XCraft_statfs(struct dentry *dentry, struct kstatfs *buf) {
     struct super_block *sb = dentry->d_sb;
     struct XCraft_superblock_info *sb_info = XCRAFT_SB(sb);
+
     buf->f_type = XCRAFT_MAGIC;
     buf->f_bsize = XCRAFT_BLOCK_SIZE;
     buf->f_blocks = le32_to_cpu(sb_info->s_super->s_blocks_count);
     buf->f_bfree = le32_to_cpu(sb_info->s_super->s_free_blocks_count);
     buf->f_bavail = le32_to_cpu(sb_info->s_super->s_free_blocks_count);
-    buf->f_files = le32_to_cpu(sb_info->s_super->s_inodes_count - sb_info->s_super->s_free_inodes_count);
-    buf->f_ffree = le32_to_cpu(sb_info->s_super->s_free_inodes_count);
+    
+    // 修正 inode 计算
+    unsigned long total_inodes = le32_to_cpu(sb_info->s_super->s_inodes_count);
+    unsigned long free_inodes = le32_to_cpu(sb_info->s_super->s_free_inodes_count);
+    buf->f_files = le32_to_cpu(sb_info->s_super->s_inodes_count);
+    buf->f_ffree = free_inodes;
+    
     buf->f_namelen = XCRAFT_NAME_LEN;
+
     return 0;
 }
+
 
 struct super_operations XCraft_sops = 
 {
