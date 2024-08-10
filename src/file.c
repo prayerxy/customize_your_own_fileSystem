@@ -493,9 +493,9 @@ static int XCraft_ext_write_begin(struct file *file, struct address_space *mappi
 	struct XCraft_superblock *disk_sb = sb_info->s_super;
 	int err;
 	uint32_t nr_allocs = 0;
-	u64 maxfilesize = XCraft_ext_maxfileblocks(file->f_inode) * XCRAFT_BLOCK_SIZE;
-	if (pos + len > maxfilesize)
-		return -ENOSPC;
+	// u64 maxfilesize = XCraft_ext_maxfileblocks(file->f_inode) * XCRAFT_BLOCK_SIZE;
+	// if (pos + len > maxfilesize)
+	// 	return -ENOSPC;
 	nr_allocs = max(pos + len, file->f_inode->i_size) / XCRAFT_BLOCK_SIZE;
 	if (nr_allocs > file->f_inode->i_blocks - 1)
 		nr_allocs -= file->f_inode->i_blocks - 1;

@@ -6,8 +6,8 @@
 
 #define FILE_PATH "/mnt/test/large_file.txt"
 #define CHUNK_SIZE 1024 * 1024  // 1MB
-#define NUM_CHUNKS 100  // 总共 100MB
-#define SMALL_CHUNK_SIZE 1024 * 512  // 512KB
+#define NUM_CHUNKS 180  // 总共 100MB
+#define SMALL_CHUNK_SIZE 100  // 512KB
 
 void write_large_file() {
     char content[SMALL_CHUNK_SIZE];

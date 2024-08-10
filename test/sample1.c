@@ -19,7 +19,7 @@ int main(){
     }
     //使用循环测试文件写性能
     clock_t start = clock();
-    for(int i = 0; i < 100000; i++){
+    for(int i = 0; i < 10000000; i++){
         fwrite(content, strlen(content), 1, fp);
     }
     clock_t end = clock();

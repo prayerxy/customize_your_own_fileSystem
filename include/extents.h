@@ -14,7 +14,7 @@
 /*最大深度*/
 #define XCRAFT_MAX_EXTENT_DEPTH 5
 /*一个extent有几个物理磁盘块*/
-#define XCRAFT_EXT_BLOCKS_NUM 2
+#define XCRAFT_EXT_BLOCKS_NUM 5
 
 /*一个XCraft_extent的ee_len最大值*/
 #define XCRAFT_INIT_MAX_LEN 100
