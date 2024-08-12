@@ -11,7 +11,7 @@ int main(){
     FILE *fp;
     clock_t start = clock();
 
-    for(int i = 0; i < 10000; i++){
+    for(int i = 0; i < 5000; i++){
         char dir[100];
         //不按照i去创建目录名，随机一个目录名
         sprintf(dir, "%s%d", path, i);

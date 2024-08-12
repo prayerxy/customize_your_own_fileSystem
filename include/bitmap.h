@@ -80,8 +80,8 @@ static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_inf
             
             // assert(desc[uninit].bg_nr_inodes!=0);
             uint32_t inode_str_blos=le16_to_cpu(desc[uninit].bg_nr_inodes)/XCRAFT_INODES_PER_BLOCK;
-            desc[uninit].bg_free_blocks_count=cpu_to_le32(le16_to_cpu(desc[uninit].bg_nr_blocks)-XCRAFT_IFREE_PER_GROUP_BLO-XCRAFT_BFREE_PER_GROUP_BLO(le16_to_cpu(desc[uninit].bg_nr_blocks))-inode_str_blos);
-            desc[uninit].bg_free_inodes_count=cpu_to_le32(desc[uninit].bg_nr_inodes);
+            desc[uninit].bg_free_blocks_count=cpu_to_le16(le16_to_cpu(desc[uninit].bg_nr_blocks)-XCRAFT_IFREE_PER_GROUP_BLO-XCRAFT_BFREE_PER_GROUP_BLO(le16_to_cpu(desc[uninit].bg_nr_blocks))-inode_str_blos);
+            desc[uninit].bg_free_inodes_count=desc[uninit].bg_nr_inodes;
             desc[uninit].bg_flags=cpu_to_le16(XCraft_BG_INODE_INIT|XCraft_BG_BLOCK_INIT);
             flag=1;
             ret=uninit;
@@ -122,8 +122,8 @@ static inline struct XCraft_group_desc* new_gb_desc(struct XCraft_superblock_inf
             //assert(desc2[next_init_group].bg_nr_inodes!=0);
             uint32_t inode_str_blos=le16_to_cpu(desc2[next_init_group].bg_nr_inodes)/XCRAFT_INODES_PER_BLOCK;
             //假想inode已经占据了inode_str_blos个块  后续put_inode不会释放这些块
-            desc2[next_init_group].bg_free_blocks_count=cpu_to_le32(le16_to_cpu(desc2[next_init_group].bg_nr_blocks)-XCRAFT_IFREE_PER_GROUP_BLO-XCRAFT_BFREE_PER_GROUP_BLO(le16_to_cpu(desc2[next_init_group].bg_nr_blocks))-inode_str_blos);
-            desc2[next_init_group].bg_free_inodes_count=cpu_to_le32(desc2[next_init_group].bg_nr_inodes);
+            desc2[next_init_group].bg_free_blocks_count=cpu_to_le16(le16_to_cpu(desc2[next_init_group].bg_nr_blocks)-XCRAFT_IFREE_PER_GROUP_BLO-XCRAFT_BFREE_PER_GROUP_BLO(le16_to_cpu(desc2[next_init_group].bg_nr_blocks))-inode_str_blos);
+            desc2[next_init_group].bg_free_inodes_count=desc2[next_init_group].bg_nr_inodes;
             desc2[next_init_group].bg_flags=cpu_to_le16(XCraft_BG_INODE_INIT|XCraft_BG_BLOCK_INIT);
 
             desc=desc2;//为了在out中更新super的free_blocks_count
@@ -155,8 +155,16 @@ out:
         memcpy((char *)tmp, (char *)sbi->s_super, sizeof(struct XCraft_superblock));
 
         group_desc_bh=bh;
-        mark_buffer_dirty(bh2);
-        mark_buffer_dirty(bh);
+        if(bh2){
+            mark_buffer_dirty(bh2);
+            sync_dirty_buffer(bh2);
+            brelse(bh2);
+        }
+        if(bh){
+            mark_buffer_dirty(bh);
+            sync_dirty_buffer(bh);
+            brelse(bh);
+        }
         return desc+ret;
     }
     else return NULL;
@@ -223,7 +231,7 @@ static inline uint32_t get_free_inode(struct XCraft_superblock_info *sbi){
         inode_begin=0;
     else//说明不是第一个块组
         inode_begin=XCRAFT_INODES_PER_GROUP*(group);
-    uint32_t ret=get_first_free_bits(sbi->s_ibmap_info[group]->ifree_bitmap,desc->bg_nr_inodes,1,inode_begin);
+    uint32_t ret=get_first_free_bits(sbi->s_ibmap_info[group]->ifree_bitmap,le16_to_cpu(desc->bg_nr_inodes),1,inode_begin);
     if(ret){
         desc->bg_free_inodes_count=cpu_to_le16(le16_to_cpu(desc->bg_free_inodes_count)-1);
         uint32_t free_inodes_count=le32_to_cpu(sbi->s_super->s_free_inodes_count);
@@ -244,6 +252,7 @@ static inline int get_free_blocks(struct XCraft_superblock_info *sbi, int len){
     struct buffer_head *bh = NULL;
     struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
     int i;
+    uint32_t ret;
     if(group_free_blocks_count(sbi, desc) < len+1){
         //先遍历所有块组
         for(i = 0; i < sbi->s_La_init_group; i++){
@@ -270,7 +279,16 @@ static inline int get_free_blocks(struct XCraft_superblock_info *sbi, int len){
         blocks_begin=0;
     else//说明不是第一个块组
         blocks_begin=XCRAFT_BLOCKS_PER_GROUP*(group);
-    uint32_t ret=get_first_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap,desc->bg_nr_blocks,len,blocks_begin);
+    ret=get_first_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap,le16_to_cpu(desc->bg_nr_blocks),len,blocks_begin);
+    if(!ret){
+        desc=new_gb_desc(sbi,bh);
+        group = sbi->s_La_init_group;
+        if(!desc){
+            printk("xcraft: no more free blocks!\n");
+            return 0;
+        }
+        ret=get_first_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap,le16_to_cpu(desc->bg_nr_blocks),len,blocks_begin);
+    }
     if(ret){
         //不连续Len会报错 待解决todo
         desc->bg_free_blocks_count=cpu_to_le16(le16_to_cpu(desc->bg_free_blocks_count)-len);
@@ -305,7 +323,7 @@ static inline void put_inode(struct XCraft_superblock_info *sbi, uint32_t ino){
     uint32_t offset = inode_get_block_group_shift(sbi, ino);
     struct buffer_head *bh = NULL;
     struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
-    if(put_free_bits(sbi->s_ibmap_info[group]->ifree_bitmap, desc->bg_nr_inodes, offset, 1))
+    if(put_free_bits(sbi->s_ibmap_info[group]->ifree_bitmap, le16_to_cpu(desc->bg_nr_inodes), offset, 1))
         return;
     
     desc->bg_free_inodes_count=cpu_to_le16(le16_to_cpu(desc->bg_free_inodes_count)+1);
@@ -322,7 +340,7 @@ static inline void put_blocks(struct XCraft_superblock_info *sbi, uint32_t block
     uint32_t offset = get_block_group_shift(sbi, block);
     struct buffer_head *bh = NULL;
     struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
-    if(put_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap, desc->bg_nr_blocks, offset, len))
+    if(put_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap, le16_to_cpu(desc->bg_nr_blocks), offset, len))
         return;
     
     desc->bg_free_blocks_count=cpu_to_le16(le16_to_cpu(desc->bg_free_blocks_count)+len);
