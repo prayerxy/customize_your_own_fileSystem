@@ -1356,7 +1356,7 @@ static int XCraft_delete_entry(struct inode *dir, struct XCraft_dir_entry *de_de
 	mark_inode_dirty(dir);
 	// 此时我们需要mark_buffer_dirty
 	mark_buffer_dirty(bh);
-	brelse(bh);
+	// brelse(bh);
 	pr_debug("finish XCraft_delete_entry!\n");
 	return 0;
 }
@@ -1531,7 +1531,8 @@ static struct buffer_head *XCraft_find_entry(struct inode *dir,
 	ret = NULL;
 
 cleanup_and_exit:
-	brelse(bh);
+	if(bh)
+		brelse(bh);
 	return ret;
 }
 
@@ -2071,6 +2072,12 @@ static int XCraft_rename(struct inode *old_dir,
 	buf1 = kmalloc(PATH_MAX, GFP_KERNEL);
 	buf2 = kmalloc(PATH_MAX, GFP_KERNEL);
 	if (!buf1 || !buf2) {
+		if(buf1){
+			kfree(buf1);
+		}
+		if(buf2){
+			kfree(buf2);
+		}
 		retval = -ENOMEM;
 		goto end_rename;
 	}
@@ -2210,8 +2217,10 @@ static int XCraft_rename(struct inode *old_dir,
 	pr_debug("rename ok!\n");
 
 end_rename:
-	brelse(old_bh);
-	brelse(new_bh);
+	if(old_bh)
+		brelse(old_bh);
+	if(new_bh)
+		brelse(new_bh);
 	return retval;
 }
 

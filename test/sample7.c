@@ -6,8 +6,8 @@
 
 #define FILE_PATH "/mnt/test/large_file.txt"
 #define CHUNK_SIZE 1024 * 1024  // 1MB
-#define NUM_CHUNKS 180  // 总共 100MB
-#define SMALL_CHUNK_SIZE 100  // 512KB
+#define NUM_CHUNKS 200  // 总共 200MB
+#define SMALL_CHUNK_SIZE 100 
 
 void write_large_file() {
     char content[SMALL_CHUNK_SIZE];
@@ -48,9 +48,11 @@ void read_large_file() {
 }
 
 int main() {
+    printf("##########test 7##########\n");
     clock_t start = clock();
     write_large_file();
     read_large_file();
     printf("大文件扩展树测试耗时: %f 秒\n", (double)(clock() - start) / CLOCKS_PER_SEC);
+    printf("##########test 7##########\n");
     return 0;
 }

@@ -23,7 +23,6 @@ int main(){
         fwrite(content, strlen(content), 1, fp);
     }
     clock_t end = clock();
-    fclose(fp);
     //文件读写测试
     fp = fopen(path, "r");
     if(fp == NULL){
@@ -45,3 +44,4 @@ int main(){
     printf("##########test 1##########\n");
     return 0;
 }
+

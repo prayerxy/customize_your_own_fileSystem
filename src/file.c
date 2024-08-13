@@ -14,7 +14,6 @@
 // 进行删除操作，map中映射要删除的逻辑块
 int XCraft_delete_ext(struct inode *inode, struct XCraft_map_blocks *map)
 {
-	pr_debug("begin XCraft_delete_ext!\n");
 	struct XCraft_ext_path *path = NULL;
 	struct super_block *sb = inode->i_sb;
 	struct XCraft_superblock_info *sbi = XCRAFT_SB(sb);
@@ -112,7 +111,6 @@ out:
 	XCraft_ext_drop_refs(path);
 	if (path)
 		kfree(path);
-	pr_debug("over XCraft_delete_ext! ret is %d\n",ret);
 	return ret;
 }
 

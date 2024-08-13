@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -13,13 +12,12 @@ void create_dir(const char *path) {
     }
 }
 
-void create_file(const char *path, const char *content) {
+void create_file(const char *path) {
     FILE *fp = fopen(path, "w");
     if (fp == NULL) {
         perror("创建文件失败");
         exit(EXIT_FAILURE);
     }
-    fwrite(content, strlen(content), 1, fp);
     fclose(fp);
 }
 
@@ -37,13 +35,13 @@ void delete_dir(const char *path) {
     }
 }
 
-void write_file(const char *path, const char *content) {
-    FILE *fp = fopen(path, "a");
+void write_to_file(const char *path, const char *content) {
+    FILE *fp = fopen(path, "w");
     if (fp == NULL) {
-        perror("打开文件失败");
+        perror("写入文件失败");
         exit(EXIT_FAILURE);
     }
-    fwrite(content, strlen(content), 1, fp);
+    fprintf(fp, "%s", content);
     fclose(fp);
 }
 
@@ -81,86 +79,45 @@ void move_file(const char *src, const char *dest) {
 }
 
 int main() {
-    char path[100] = "/mnt/test/";
-    char content[100] = "Hello World!";
-    char new_content[100] = "Hello, this is a new line!\n";
+    char *dir1 = "/mnt/test/dir1";
+    char *dir2 = "/mnt/test/dir2";
+    char *file1 = "/mnt/test/dir1/1.txt";
+    char *new_file1 = "/mnt/test/dir2/1.txt";
+    char *content = "hello";
     printf("##########test 3##########\n");
-    clock_t start = clock();
+    // 创建目录
+    create_dir(dir1);
+    printf("创建目录: %s\n", dir1);
 
-    // 创建目录和文件
-    for (int i = 0; i < 10; i++) {
-        char dir[100];
-        char subdir[100];
-        char file[100];
-
-        sprintf(dir, "%sdir%d", path, i);
-        create_dir(dir);
-
-        sprintf(subdir, "%s/subdir", dir);
-        create_dir(subdir);
-
-        sprintf(file, "%s/file%d.txt", subdir, i);
-        create_file(file, content);
-    }
-
-    printf("已创建10个目录及文件\n");
+    // 创建文件
+    create_file(file1);
+    printf("创建文件: %s\n", file1);
 
     // 写入文件内容
-    for (int i = 0; i < 10; i++) {
-        char file[100];
-        sprintf(file, "%sdir%d/subdir/file%d.txt", path, i, i);
-        write_file(file, new_content);
-    }
-
-    printf("已写入文件内容\n");
+    write_to_file(file1, content);
+    printf("写入文件内容: %s\n", content);
 
     // 读取文件内容
-    for (int i = 0; i < 10; i++) {
-        char file[100];
-        sprintf(file, "%sdir%d/subdir/file%d.txt", path, i, i);
-        read_file(file);
-    }
-
-    printf("已读取文件内容\n");
+    printf("读取文件内容:\n");
+    read_file(file1);
 
     // 显示目录项
-    for (int i = 0; i < 10; i++) {
-        char dir[100];
-        sprintf(dir, "%sdir%d/subdir", path, i);
-        printf("目录 %s:\n", dir);
-        list_dir(dir);
-    }
+    printf("目录内容:\n");
+    list_dir(dir1);
 
-    // 剪切文件
-    for (int i = 0; i < 10; i++) {
-        char src[100];
-        char dest[100];
-        sprintf(src, "%sdir%d/subdir/file%d.txt", path, i, i);
-        sprintf(dest, "%sdir%d/file%d.txt", path, i, i);
-        move_file(src, dest);
-    }
+    // // 剪切文件
+    create_dir(dir2);  // 先创建目标目录
+    move_file(file1, new_file1);
+    printf("文件剪切至: %s\n", new_file1);
 
-    printf("已剪切文件\n");
+    // 删除文件
+    delete_file(new_file1);
+    printf("删除文件: %s\n", new_file1);
 
-    // 删除文件和目录
-    for (int i = 0; i < 10; i++) {
-        char file[100];
-        char subdir[100];
-        char dir[100];
-
-        sprintf(file, "%sdir%d/file%d.txt", path, i, i);
-        delete_file(file);
-
-        sprintf(subdir, "%sdir%d/subdir", path, i);
-        delete_dir(subdir);
-
-        sprintf(dir, "%sdir%d", path, i);
-        delete_dir(dir);
-    }
-
-    printf("已删除文件和目录\n");
-
-    printf("文件系统测试总耗时: %f 秒\n", (double)(clock() - start) / CLOCKS_PER_SEC);
+    // 删除目录
+    delete_dir(dir1);
+    delete_dir(dir2);
+    printf("删除目录: %s 和 %s\n", dir1, dir2);
     printf("##########test 3##########\n");
     return 0;
 }

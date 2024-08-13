@@ -47,7 +47,7 @@ int main() {
     // 文件路径
     const char *user1_file = "/mnt/test/user1_testfile.txt";
     const char *user2_file = "/mnt/test/user2_testfile.txt";
-
+    printf("##########test 6##########\n");
     // 用户1创建文件
     if (execute_command_as_user(user1, password1, "touch /mnt/test/user1_testfile.txt") == 0) {
         printf("User1: Successfully created file in /mnt/test/\n");
@@ -89,6 +89,6 @@ int main() {
     } else {
         printf("User2: Failed to write to user1's file (expected)\n");
     }
-
+    printf("##########test 6##########\n");
     return 0;
 }

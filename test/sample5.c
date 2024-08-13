@@ -57,7 +57,9 @@ void read_files_in_dirs() {
                 exit(EXIT_FAILURE);
             }
             while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-                printf("%s", buffer);
+                //随机数判断是否输出
+                if (rand() % 10 == 0)
+                    printf("%s", buffer);
             }
             fclose(fp);
         }
@@ -89,10 +91,12 @@ void delete_files_and_dirs() {
 }
 
 int main() {
+    printf("##########test 5##########\n");
     clock_t start = clock();
     create_dirs_and_files();
     read_files_in_dirs();
     delete_files_and_dirs();
     printf("目录哈希测试耗时: %f 秒\n", (double)(clock() - start) / CLOCKS_PER_SEC);
+    printf("##########test 5##########\n");
     return 0;
 }

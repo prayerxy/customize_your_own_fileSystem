@@ -88,3 +88,4 @@ clean:
 # Prevent make from treating 'k' as a file name
 %:
 	@:
+

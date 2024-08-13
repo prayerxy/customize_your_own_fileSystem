@@ -155,16 +155,8 @@ out:
         memcpy((char *)tmp, (char *)sbi->s_super, sizeof(struct XCraft_superblock));
 
         group_desc_bh=bh;
-        if(bh2){
-            mark_buffer_dirty(bh2);
-            sync_dirty_buffer(bh2);
-            brelse(bh2);
-        }
-        if(bh){
-            mark_buffer_dirty(bh);
-            sync_dirty_buffer(bh);
-            brelse(bh);
-        }
+        mark_buffer_dirty(bh2);
+        mark_buffer_dirty(bh);
         return desc+ret;
     }
     else return NULL;
@@ -252,7 +244,6 @@ static inline int get_free_blocks(struct XCraft_superblock_info *sbi, int len){
     struct buffer_head *bh = NULL;
     struct XCraft_group_desc *desc = get_group_desc(sbi, group, bh);
     int i;
-    uint32_t ret;
     if(group_free_blocks_count(sbi, desc) < len+1){
         //先遍历所有块组
         for(i = 0; i < sbi->s_La_init_group; i++){
@@ -279,16 +270,7 @@ static inline int get_free_blocks(struct XCraft_superblock_info *sbi, int len){
         blocks_begin=0;
     else//说明不是第一个块组
         blocks_begin=XCRAFT_BLOCKS_PER_GROUP*(group);
-    ret=get_first_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap,le16_to_cpu(desc->bg_nr_blocks),len,blocks_begin);
-    if(!ret){
-        desc=new_gb_desc(sbi,bh);
-        group = sbi->s_La_init_group;
-        if(!desc){
-            printk("xcraft: no more free blocks!\n");
-            return 0;
-        }
-        ret=get_first_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap,le16_to_cpu(desc->bg_nr_blocks),len,blocks_begin);
-    }
+    uint32_t ret=get_first_free_bits(sbi->s_ibmap_info[group]->bfree_bitmap,le16_to_cpu(desc->bg_nr_blocks),len,blocks_begin);
     if(ret){
         //不连续Len会报错 待解决todo
         desc->bg_free_blocks_count=cpu_to_le16(le16_to_cpu(desc->bg_free_blocks_count)-len);

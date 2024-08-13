@@ -17,7 +17,6 @@ void create_and_delete_files() {
     char path[256];
     char content[100] = "Hello World!";
     FILE *fp;
-
     for (int i = 0; i < NUM_FILES; i++) {
         sprintf(path, "%sfile%d.txt", PATH_PREFIX, i);
         fp = fopen(path, "w");
@@ -43,8 +42,10 @@ void create_and_delete_files() {
 }
 
 int main() {
+    printf("##########test 4##########\n");
     clock_t start = clock();
     create_and_delete_files();
     printf("延迟初始化测试耗时: %f 秒\n", (double)(clock() - start) / CLOCKS_PER_SEC);
+    printf("##########test 4##########\n");
     return 0;
 }

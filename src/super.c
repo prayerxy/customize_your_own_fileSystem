@@ -231,10 +231,6 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
     struct buffer_head *bh3;
     struct XCraft_group_desc *disk_gdb ;
     int i;
-    int j;
-    uint64_t*ifree_bitmap;
-    uint64_t*bfree_bitmap;
-    uint64_t*bh_data;
 
     uint32_t bfree_blo;
 
@@ -279,12 +275,7 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
         bh1 = sb_bread(sb, bg_inode_bitmap);
         if(!bh1)
             return -EIO;
-        // memcpy(bh1->b_data, (void *)(sb_info->s_ibmap_info[i]->ifree_bitmap), XCRAFT_BLOCK_SIZE);
-        ifree_bitmap=(uint64_t*)sb_info->s_ibmap_info[i]->ifree_bitmap;
-        bh_data=(uint64_t*)bh1->b_data;
-        for(j=0;j<XCRAFT_BLOCK_SIZE/8;j++){
-            bh_data[j]=cpu_to_le64(ifree_bitmap[j]);
-        }
+        memcpy(bh1->b_data, (void *)(sb_info->s_ibmap_info[i]->ifree_bitmap), XCRAFT_BLOCK_SIZE);
         mark_buffer_dirty(bh1);
         if (wait)
             sync_dirty_buffer(bh1);
@@ -296,12 +287,7 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
         if(!bh2)
             return -EIO;
 
-        // memcpy(bh2->b_data, (void *)(sb_info->s_ibmap_info[i]->bfree_bitmap), XCRAFT_BLOCK_SIZE);
-        bfree_bitmap=(uint64_t*)sb_info->s_ibmap_info[i]->bfree_bitmap;
-        bh_data=(uint64_t*)bh2->b_data;
-        for(j=0;j<XCRAFT_BLOCK_SIZE/8;j++){
-            bh_data[j]=cpu_to_le64(bfree_bitmap[j]);
-        }
+        memcpy(bh2->b_data, (void *)(sb_info->s_ibmap_info[i]->bfree_bitmap), XCRAFT_BLOCK_SIZE);
         mark_buffer_dirty(bh2);
         if (wait)
             sync_dirty_buffer(bh2);
@@ -312,12 +298,7 @@ static int XCraft_sync_fs(struct super_block *sb, int wait){
             bh3 = sb_bread(sb, bg_block_bitmap+1);
             if(!bh3)
                 return -EIO;
-            // memcpy(bh3->b_data, (void *)(sb_info->s_ibmap_info[i]->bfree_bitmap) + XCRAFT_BLOCK_SIZE, XCRAFT_BLOCK_SIZE);
-            bfree_bitmap=(uint64_t*)((void*)sb_info->s_ibmap_info[i]->bfree_bitmap+XCRAFT_BLOCK_SIZE);
-            bh_data=(uint64_t*)bh3->b_data;
-            for(j=0;j<XCRAFT_BLOCK_SIZE/8;j++){
-                bh_data[j]=cpu_to_le64(bfree_bitmap[j]);
-            }
+            memcpy(bh3->b_data, (void *)(sb_info->s_ibmap_info[i]->bfree_bitmap) + XCRAFT_BLOCK_SIZE, XCRAFT_BLOCK_SIZE);
             mark_buffer_dirty(bh3);
             if (wait)
                 sync_dirty_buffer(bh3);
@@ -368,7 +349,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     struct inode* root_inode = NULL;
     struct XCraft_inode_info *root_inode_info = NULL;
     int ret;
-    int i,j;
+    int i;
     struct XCraft_superblock *disk_sb_tmp;
     unsigned long gdb_count = 0;
 
@@ -384,7 +365,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     sb->s_magic = XCRAFT_MAGIC;
     sb_set_blocksize(sb, XCRAFT_BLOCK_SIZE);
     // sb->s_maxbytes = XCraft_get_max_filesize();
-    sb->s_maxbytes = 200 * 1024 * 1024;
+    sb->s_maxbytes=220*1024*1024;
     sb->s_op = &XCraft_sops;
 
     // read sb from disk
@@ -403,9 +384,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     disk_sb->s_last_group_blocks = disk_sb_tmp->s_last_group_blocks;
     disk_sb->s_magic = disk_sb_tmp->s_magic;
     disk_sb->s_inode_size = disk_sb_tmp->s_inode_size;
-    uint64_t*ifree_bitmap;
-    uint64_t*bfree_bitmap;
-    uint64_t*bh_data;
+
     // check magic
     if(disk_sb->s_magic != sb->s_magic){
         pr_err("Wrong magic number\n");
@@ -482,14 +461,8 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
         ret = -EIO;
         goto out_free_group_desc;
     }
-    // memcpy((void *)sb_info->s_ibmap_info[0]->ifree_bitmap, bh->b_data,
-    //         XCRAFT_BLOCK_SIZE);
-    ifree_bitmap=(uint64_t*)sb_info->s_ibmap_info[0]->ifree_bitmap;
-    bh_data=(uint64_t*)bh->b_data;
-    for(j=0;j<XCRAFT_BLOCK_SIZE/8;j++){
-        ifree_bitmap[j]=le64_to_cpu(bh_data[j]);
-    }
-    
+    memcpy((void *)sb_info->s_ibmap_info[0]->ifree_bitmap, bh->b_data,
+            XCRAFT_BLOCK_SIZE);
     brelse(bh);
 
     bh=sb_bread(sb,2 + XCRAFT_DESC_LIMIT_blo);
@@ -497,12 +470,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
         ret = -EIO;
         goto out_free_group_desc;
     }
-    // memcpy((void *)sb_info->s_ibmap_info[0]->bfree_bitmap, bh->b_data,XCRAFT_BLOCK_SIZE);
-    bfree_bitmap=(uint64_t*)sb_info->s_ibmap_info[0]->bfree_bitmap;
-    bh_data=(uint64_t*)bh->b_data;
-    for(j=0;j<XCRAFT_BLOCK_SIZE/8;j++){
-        bfree_bitmap[j]=le64_to_cpu(bh_data[j]);
-    }
+    memcpy((void *)sb_info->s_ibmap_info[0]->bfree_bitmap, bh->b_data,XCRAFT_BLOCK_SIZE);
     brelse(bh);
 
     if(bfree_blo>1){
@@ -511,12 +479,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
             ret = -EIO;
             goto out_free_group_desc;
         }
-        // memcpy((void *)sb_info->s_ibmap_info[0]->bfree_bitmap+XCRAFT_BLOCK_SIZE, bh->b_data,XCRAFT_BLOCK_SIZE);
-        bfree_bitmap=(uint64_t*)((void*)sb_info->s_ibmap_info[0]->bfree_bitmap+XCRAFT_BLOCK_SIZE);
-        bh_data=(uint64_t*)bh->b_data;
-        for(j=0;j<XCRAFT_BLOCK_SIZE/8;j++){
-            bfree_bitmap[j]=le64_to_cpu(bh_data[j]);
-        }
+        memcpy((void *)sb_info->s_ibmap_info[0]->bfree_bitmap+XCRAFT_BLOCK_SIZE, bh->b_data,XCRAFT_BLOCK_SIZE);
         brelse(bh);
     }
     
