@@ -147,7 +147,7 @@ out:
         free_blocks_count-=le16_to_cpu(desc[ret].bg_nr_blocks)-le16_to_cpu(desc[ret].bg_free_blocks_count);
         sbi->s_super->s_free_blocks_count=cpu_to_le32(free_blocks_count);
         sbi->s_La_init_group=s_La_init_group;//最后一个初始化的块组位置
-        // printk("s_La_init_group:%d\n",s_La_init_group);
+        // printk("xcraft: s_La_init_group:%d\n",s_La_init_group);
         pr_debug("s_La_init_group:%d\n",s_La_init_group);
        
         struct buffer_head *bh2 = sbi->s_sbh;

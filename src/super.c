@@ -365,7 +365,7 @@ int XCraft_fill_super(struct super_block *sb, void *data, int silent){
     sb->s_magic = XCRAFT_MAGIC;
     sb_set_blocksize(sb, XCRAFT_BLOCK_SIZE);
     // sb->s_maxbytes = XCraft_get_max_filesize();
-    sb->s_maxbytes=220*1024*1024;
+    sb->s_maxbytes=520*1024*1024;
     sb->s_op = &XCraft_sops;
 
     // read sb from disk

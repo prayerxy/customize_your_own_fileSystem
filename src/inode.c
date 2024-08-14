@@ -69,8 +69,6 @@ int XCraft_permission(struct inode *inode, int mask)
 
 // 删除所有的hash块
 // 只有判断其存在hash树了才会调用
-
-// 重点修改 很大问题
 static int XCraft_delete_hash_block(struct inode *inode)
 {
 	pr_debug("begin delete_hash_block!\n");
@@ -1200,7 +1198,7 @@ again:
 			goto cleanup;
 		}
 	}
-	// dx_entry的分裂已经完成
+	// dx_entry的分裂已经完成  上面完成索引块的分裂，现在完成叶节点目录项块的分裂
 	de = do_split(dir, &bh, frame, &hinfo);
 	if (IS_ERR(de))
 	{

@@ -3,3 +3,9 @@ echo 'module xcraft +p' | sudo tee /sys/kernel/debug/dynamic_debug/control
 
 不启用动态调试，不显示打印调试语句：
 echo 'module xcraft -p' | sudo tee /sys/kernel/debug/dynamic_debug/control
+
+dd if=/dev/zero of=fat32.img bs=1M count=1024
+mkfs.vfat -F 32 fat32.img
+sudo mount -o loop fat32.img /mnt/test
+df -TH
+sudo umount /mnt/test

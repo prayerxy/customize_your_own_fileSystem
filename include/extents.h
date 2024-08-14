@@ -345,6 +345,7 @@ static unsigned int XCraft_check_overlap(struct inode *inode,
     {
         // 寻找下一个分配的起始逻辑块号
         b2 = find_next_allocated_block(path);
+        //没有找到下一个
         if (b2 == XCRAFT_EXT_MAX_BLOCKS)
             goto out;
     }
@@ -575,6 +576,7 @@ static int XCraft_ext_split(struct inode *inode, struct XCraft_ext_path *path,
         // 后面直接插即可
         border = newext->ee_block;
 
+    //把前面~border的在原来的满块  border~最后复制到新块 newext插入到原来的块
     // alloc_blocks = kzalloc(sizeof(unsigned int) * depth, GFP_KERNEL);
     alloc_blocks = kcalloc(depth, sizeof(unsigned int), GFP_NOFS);
     if (!alloc_blocks)
@@ -676,7 +678,7 @@ static int XCraft_ext_split(struct inode *inode, struct XCraft_ext_path *path,
         fidx->ei_leaf = cpu_to_le32(oldblock);
         fidx->ei_unused = 0;
 
-        // index 信息进行copy
+        // index 信息进行copy  如果要插入的path的右边还有idx，那么需要copy一部分
         m = XCRAFT_LAST_INDEX(path[i].p_hdr) - path[i].p_idx++;
         if (m)
         {
@@ -704,6 +706,7 @@ static int XCraft_ext_split(struct inode *inode, struct XCraft_ext_path *path,
     }
 
     /*将子树插入到扩展树中*/
+    //把最开始空闲的索引块 连接下面创建的子树
     err = XCraft_ext_insert_index(inode, path + at,
                                   le32_to_cpu(border), newblock);
 cleanup:
@@ -835,7 +838,7 @@ repeat:
             goto out;
         pr_debug("over XCraft_ext_split\n");
 
-        // 此时更新path
+        // 此时更新path  在insert_extent中插入extent
         path = XCraft_find_extent(inode, le32_to_cpu(newext->ee_block), ppath);
         if (IS_ERR(path))
             err = PTR_ERR(path);
@@ -948,6 +951,7 @@ static int XCraft_ext_insert_extent(struct inode *inode, struct XCraft_ext_path 
     if (le32_to_cpu(newext->ee_block) > le32_to_cpu(fex->ee_block))
         // 观察下一个叶子节点中是否有位置
         next = XCraft_ext_next_leaf_block(path);
+    //在右边的叶子节点有位置，直接插入
     if (next != XCRAFT_EXT_MAX_BLOCKS)
     {
         // 下一个叶子节点中是否有位置     next是最下面的最小值的复写  直接找第一个extent
