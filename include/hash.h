@@ -539,7 +539,7 @@ static struct XCraft_dir_entry *do_split(struct inode *dir,
 	de->rec_len = cpu_to_le16(sizeof(struct XCraft_dir_entry));
 	de2->rec_len = cpu_to_le16(sizeof(struct XCraft_dir_entry));
 	
-	// 判断条件需要注意
+	// 判断条件需要注意 
 	if((continued && hinfo->hash>hash2) || (!continued && hinfo->hash>=hash2)){
 		swap(*bh, bh2);
 		de = de2;

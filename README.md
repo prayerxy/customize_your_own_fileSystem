@@ -19,10 +19,14 @@
 ### 演示视频
 
 <div>
-    <b>项目视频链接：https://pan.baidu.com/s/1JFFDYpw5kEdWhu2zMRdqUg?pwd=1234</b><br>
+    <b>项目具体讲解视频链接：https://pan.baidu.com/s/1JFFDYpw5kEdWhu2zMRdqUg?pwd=1234</b><br>
     <b>提取码：1234</b><br>
 </div>
 
+<div>
+    <b>项目演示视频链接： https://pan.baidu.com/s/1_tJK7ZWdm3xWzMMhuUjxVQ?pwd=1234</b><br>
+    <b>提取码：1234</b><br>
+</div>
 
 
 
