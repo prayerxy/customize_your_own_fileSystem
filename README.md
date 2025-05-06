@@ -1,5 +1,9 @@
 ## XCRAFT_FS
 
+<p align="center">
+    【<a href="README_en.md">English</a>】 | 【中文】
+</p>
+
 我们来自南开大学的队伍PRAY4U
 
 选题题目是`proj209-自己设计一个Linux 文件系统并实现文件和目录读写操作`
